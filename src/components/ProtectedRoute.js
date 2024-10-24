@@ -1,15 +1,25 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
+import { jwtDecode } from 'jwt-decode'; // Import jwtDecode as a named import
 
-const ProtectedRoute = ({ children }) => {
-  const token = localStorage.getItem('token'); // Check if token exists
+const ProtectedRoute = ({ children, adminOnly = false }) => {
+  const token = localStorage.getItem('token');
 
   if (!token) {
     // If no token, redirect to the login page
     return <Navigate to="/" />;
   }
 
-  // If token exists, allow access to the child component (e.g., ProductionLog)
+  // Decode the token to check the user's role
+  const decodedToken = jwtDecode(token);
+  const userRole = decodedToken.role;
+
+  // If the route is adminOnly and the user is not an admin, redirect
+  if (adminOnly && userRole !== 'admin') {
+    return <Navigate to="/" />;
+  }
+
+  // If token exists and (if adminOnly) user is admin, allow access
   return children;
 };
 

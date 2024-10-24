@@ -1,24 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import productService from '../services/productService'; // Use this service for interacting with the backend
+import productService from '../services/productService';
 
 function AdminProductPage() {
   const [productName, setProductName] = useState('');
+  const [companyName, setCompanyName] = useState(''); // New state for company
   const [message, setMessage] = useState('');
-  const [products, setProducts] = useState([]); // State for storing products
-  const [editProductId, setEditProductId] = useState(null); // Track the product being edited
-  const [editProductName, setEditProductName] = useState(''); // Track the new name for the product
+  const [products, setProducts] = useState([]);
+  const [editProductId, setEditProductId] = useState(null);
+  const [editProductName, setEditProductName] = useState('');
+  const [editCompanyName, setEditCompanyName] = useState(''); // New state for editing company
 
-  // Function to load all products from the backend
+  // Load all products
   const loadProducts = async () => {
     try {
       const productsData = await productService.getProducts();
-      setProducts(productsData); // Set the products in state
+      setProducts(productsData);
+      
     } catch (error) {
       console.error('Error loading products:', error);
     }
   };
 
-  // Load products when the component mounts
+  // Load products when component mounts
   useEffect(() => {
     loadProducts();
   }, []);
@@ -27,29 +30,31 @@ function AdminProductPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await productService.createProduct(productName); // Send product creation request
+      await productService.createProduct(productName, companyName); // Include company
       setMessage('Product created successfully!');
-      setProductName(''); // Clear the input field
-      loadProducts(); // Reload the product list
+      setProductName('');
+      setCompanyName(''); // Clear company field
+      loadProducts(); // Reload products
     } catch (error) {
       console.error('Error creating product:', error);
       setMessage('Error creating product.');
     }
   };
 
-  // Handle starting product editing
+  // Handle starting edit mode
   const startEdit = (product) => {
     setEditProductId(product.id);
     setEditProductName(product.name);
+    setEditCompanyName(product.company); // Set the company name for editing
   };
 
-  // Handle saving the updated product name
+  // Handle saving the updated product
   const saveEdit = async () => {
     try {
-      await productService.updateProduct(editProductId, editProductName); // Send update request
+      await productService.updateProduct(editProductId, editProductName, editCompanyName); // Include company
       setMessage('Product updated successfully!');
-      setEditProductId(null); // Clear edit mode
-      loadProducts(); // Reload the product list
+      setEditProductId(null);
+      loadProducts(); // Reload products
     } catch (error) {
       console.error('Error updating product:', error);
       setMessage('Error updating product.');
@@ -70,6 +75,16 @@ function AdminProductPage() {
             required
           />
         </div>
+        <div className="form-group">
+          <label>Company Name</label>
+          <input
+            type="text"
+            className="form-control"
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+            required
+          />
+        </div>
         <button type="submit" className="btn btn-primary mt-3">
           Create Product
         </button>
@@ -82,6 +97,7 @@ function AdminProductPage() {
           <tr>
             <th>Product ID</th>
             <th>Product Name</th>
+            <th>Company</th> 
             <th>Actions</th>
           </tr>
         </thead>
@@ -90,7 +106,6 @@ function AdminProductPage() {
             <tr key={product.id}>
               <td>{product.id}</td>
               <td>
-                {/* If editing this product, show input field */}
                 {editProductId === product.id ? (
                   <input
                     type="text"
@@ -103,7 +118,18 @@ function AdminProductPage() {
                 )}
               </td>
               <td>
-                {/* Edit and Save buttons */}
+                {editProductId === product.id ? (
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={editCompanyName}
+                    onChange={(e) => setEditCompanyName(e.target.value)}
+                  />
+                ) : (
+                  product.company
+                )}
+              </td>
+              <td>
                 {editProductId === product.id ? (
                   <button className="btn btn-success" onClick={saveEdit}>
                     Save

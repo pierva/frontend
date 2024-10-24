@@ -12,11 +12,11 @@ const getProducts = async () => {
   return response.data;
 };
 
-const createProduct = async (name) => {
+const createProduct = async (name, company) => {
   const token = localStorage.getItem('token');
   const response = await axios.post(
     `${API_URL}/api/products`,
-    { name },
+    { name, company }, // Send both name and company
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -26,11 +26,11 @@ const createProduct = async (name) => {
   return response.data;
 };
 
-const updateProduct = async (id, name) => {
+const updateProduct = async (id, name, company) => {
   const token = localStorage.getItem('token');
   const response = await axios.put(
     `${API_URL}/api/products/${id}`,
-    { name },
+    { name, company }, // Send both name and company
     {
       headers: {
         Authorization: `Bearer ${token}`,

@@ -9,15 +9,14 @@ function ProductionLog() {
     const [logs, setLogs] = useState([]);
     const [message, setMessage] = useState('');
 
-    // Sort state
+    // State for sorting, date filtering, and search
     const [sortConfig, setSortConfig] = useState({ key: 'date_logged', direction: 'ascending' });
-
-    // Date range filter state
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-
-    // Search term for filtering by Lot Code or Product Type
     const [searchTerm, setSearchTerm] = useState('');
+
+    // State for totals section
+    const [totalsVisible, setTotalsVisible] = useState(false);
 
     // Fetch products and logs
     useEffect(() => {
@@ -69,12 +68,8 @@ function ProductionLog() {
     // Sorting function
     const sortLogs = (logs, key, direction) => {
         return [...logs].sort((a, b) => {
-            if (a[key] < b[key]) {
-                return direction === 'ascending' ? -1 : 1;
-            }
-            if (a[key] > b[key]) {
-                return direction === 'ascending' ? 1 : -1;
-            }
+            if (a[key] < b[key]) return direction === 'ascending' ? -1 : 1;
+            if (a[key] > b[key]) return direction === 'ascending' ? 1 : -1;
             return 0;
         });
     };
@@ -93,7 +88,7 @@ function ProductionLog() {
         if (sortConfig.key === key) {
             return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
         }
-        return ''; // No arrow for unsorted columns
+        return '';
     };
 
     // Filter logs by search term (Lot Code or Product Type)
@@ -123,14 +118,21 @@ function ProductionLog() {
 
     // Get the sorted and filtered logs
     const sortedLogs = sortLogs(logs, sortConfig.key, sortConfig.direction);
-    const filteredLogsBySearch = filterLogsBySearchTerm(sortedLogs); // Apply search filter
-    const finalFilteredLogs = filterLogsByDate(filteredLogsBySearch); // Apply date filter
+    const filteredLogsBySearch = filterLogsBySearchTerm(sortedLogs);
+    const finalFilteredLogs = filterLogsByDate(filteredLogsBySearch);
+
+    // Calculate totals
+    const totalUnits = finalFilteredLogs.reduce((total, log) => total + log.quantity, 0);
+    const totalByProductType = finalFilteredLogs.reduce((acc, log) => {
+        acc[log.product] = (acc[log.product] || 0) + log.quantity;
+        return acc;
+    }, {});
 
     return (
         <div className="container mt-5">
             <h2 className='text-center'>Production Log</h2>
 
-            {/* Search filter for Lot Code or Product Type */}
+            {/* Search and Date Range Filters */}
             <div className="mt-5">
                 <h3>Filter Logs</h3>
                 <div className="form-group">
@@ -144,7 +146,6 @@ function ProductionLog() {
                     />
                 </div>
 
-                {/* Date range filter */}
                 <div className="form-group mt-3">
                     <label>Date Range</label>
                     <div className="row">
@@ -168,10 +169,41 @@ function ProductionLog() {
                         </div>
                     </div>
                 </div>
-
             </div>
 
-            {/* Display the list of production logs */}
+            {/* Collapsible Totals Section */}
+            <div className="mt-4">
+                <button
+                    className="btn btn-secondary"
+                    onClick={() => setTotalsVisible(!totalsVisible)}
+                >
+                    {totalsVisible ? 'Hide Totals' : 'Show Totals'}
+                </button>
+                {totalsVisible && (
+                    <div className="card mt-3 p-3">
+                        <h4>Total Units: {totalUnits}</h4>
+                        <h5>Breakdown by Product Type:</h5>
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Product Type</th>
+                                    <th>Total Quantity</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {Object.entries(totalByProductType).map(([product, quantity]) => (
+                                    <tr key={product}>
+                                        <td>{product}</td>
+                                        <td>{quantity}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            {/* Production Logs Table */}
             <h3 className="mt-5">Production Logs</h3>
             <table className="table table-bordered mt-3">
                 <thead>

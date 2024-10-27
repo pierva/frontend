@@ -5,7 +5,7 @@ const API_URL = process.env.REACT_APP_API_URL;
 function AdminUserManagement() {
     const [users, setUsers] = useState([]);
     const [error, setError] = useState('');
-    const [newUser, setNewUser] = useState({ username: '', password: '', role: 'factory_user' });
+    const [newUser, setNewUser] = useState({ username: '', password: '', role: 'factory_team' });
     const [passwordChanges, setPasswordChanges] = useState({});
     const [loggedAdmin, setLoggedAdmin] = useState(null);
     const [message, setMessage] = useState('');
@@ -21,6 +21,8 @@ function AdminUserManagement() {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 setUsers(response.data);
+                console.log(users);
+                
             } catch (error) {
                 setError('Error fetching users. Only admins can access this page.');
                 autoDismissMessage('error');
@@ -87,7 +89,7 @@ function AdminUserManagement() {
                 }
             );
             setMessage('New user added successfully');
-            setNewUser({ username: '', password: '', role: 'factory_user' });
+            setNewUser({ username: '', password: '', role: 'factory_team' });
             const response = await axios.get(`${API_URL}/api/users`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -156,7 +158,7 @@ function AdminUserManagement() {
                         value={newUser.role}
                         onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                     >
-                        <option value="factory_user">Factory User</option>
+                        <option value="factory_team">Factory User</option>
                         <option value="client">Client</option>
                         <option value="admin">Admin</option>
                     </select>
@@ -186,7 +188,7 @@ function AdminUserManagement() {
                                     className="form-select"
                                     disabled={loggedAdmin && loggedAdmin.id === user.id}
                                 >
-                                    <option value="factory_user">Factory User</option>
+                                    <option value="factory_team">Factory User</option>
                                     <option value="client">Client</option>
                                     <option value="admin">Admin</option>
                                 </select>

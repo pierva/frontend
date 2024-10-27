@@ -81,11 +81,18 @@ function Navbar() {
                     </Link>
                   </li>
                   {isAdmin && (
-                    <li className="nav-item">
-                      <Link className="nav-link" to="/admin/products">
-                        Create Product
-                      </Link>
-                    </li>
+                    <>
+                      <li className="nav-item">
+                        <Link className="nav-link" to="/admin/products">
+                          Create Product
+                        </Link>
+                      </li>
+                      <li className="nav-item">
+                        <Link className="nav-link" to="/admin/users">
+                          User Management
+                        </Link>
+                      </li>
+                    </>
                   )}
                   <li className="nav-item">
                     <button className="btn btn-outline-danger" onClick={handleLogout}>

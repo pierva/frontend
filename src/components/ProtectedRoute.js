@@ -9,18 +9,21 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
     // If no token, redirect to the login page
     return <Navigate to="/" />;
   }
+  try {
+    const decodedToken = jwtDecode(token);
+    const isAdmin = decodedToken.role === 'admin';
 
-  // Decode the token to check the user's role
-  const decodedToken = jwtDecode(token);
-  const userRole = decodedToken.role;
+    // If adminOnly is true and the user is not an admin, redirect to the login page or show an error
+    if (adminOnly && !isAdmin) {
+      return <Navigate to="/" />;
+    }
 
-  // If the route is adminOnly and the user is not an admin, redirect
-  if (adminOnly && userRole !== 'admin') {
+    // If logged in (and has admin rights if required), render the protected content
+    return children;
+  } catch (error) {
+    // In case of token decoding failure, redirect to login
     return <Navigate to="/" />;
   }
-
-  // If token exists and (if adminOnly) user is admin, allow access
-  return children;
-};
+}
 
 export default ProtectedRoute;

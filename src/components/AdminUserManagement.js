@@ -6,8 +6,9 @@ function AdminUserManagement() {
     const [users, setUsers] = useState([]);
     const [error, setError] = useState('');
     const [newUser, setNewUser] = useState({ username: '', password: '', role: 'factory_user' });
-    const [passwordChanges, setPasswordChanges] = useState({}); // Store password changes for users
-    const [loggedAdmin, setLoggedAdmin] = useState(null); // Track logged admin
+    const [passwordChanges, setPasswordChanges] = useState({});
+    const [loggedAdmin, setLoggedAdmin] = useState(null);
+    const [message, setMessage] = useState('');
 
     useEffect(() => {
         const fetchUsers = async () => {
@@ -22,6 +23,7 @@ function AdminUserManagement() {
                 setUsers(response.data);
             } catch (error) {
                 setError('Error fetching users. Only admins can access this page.');
+                autoDismissMessage('error');
             }
         };
 
@@ -29,7 +31,6 @@ function AdminUserManagement() {
     }, []);
 
     const handleRoleChange = async (userId, newRole) => {
-        // Prevent logged admin from changing their own role
         if (loggedAdmin && loggedAdmin.id === userId) {
             alert("You cannot change your own role.");
             return;
@@ -44,8 +45,11 @@ function AdminUserManagement() {
                 }
             );
             setUsers(users.map((user) => (user.id === userId ? { ...user, role: newRole } : user)));
+            setMessage("Role successfully updated");
+            autoDismissMessage('success');
         } catch (error) {
             setError('Failed to update role.');
+            autoDismissMessage('error');
         }
     };
 
@@ -63,10 +67,12 @@ function AdminUserManagement() {
                     headers: { Authorization: `Bearer ${token}` },
                 }
             );
-            alert('Password updated successfully');
+            setMessage('Password updated successfully');
             setPasswordChanges({ ...passwordChanges, [userId]: '' });
+            autoDismissMessage('success');
         } catch (error) {
             setError('Failed to update password.');
+            autoDismissMessage('error');
         }
     };
 
@@ -80,22 +86,45 @@ function AdminUserManagement() {
                     headers: { Authorization: `Bearer ${token}` },
                 }
             );
-            alert('New user added successfully');
+            setMessage('New user added successfully');
             setNewUser({ username: '', password: '', role: 'factory_user' });
-            // Fetch updated users list
             const response = await axios.get(`${API_URL}/api/users`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             setUsers(response.data);
+            autoDismissMessage('success');
         } catch (error) {
             setError('Failed to add user.');
+            autoDismissMessage('error');
         }
     };
 
+    const autoDismissMessage = (type) => {
+        setTimeout(() => {
+            if (type === 'success') setMessage('');
+            if (type === 'error') setError('');
+        }, 3000);
+    };
+
     return (
-        <div className='container'>
+        <div className='container mt-5'>
+            {/* Success/Error Message Display */}
+            <div className="fixed-top mt-5 d-flex justify-content-center">
+                {message && (
+                    <div className="alert alert-success alert-dismissible fade show w-75" role="alert">
+                        {message}
+                        <button type="button" className="btn-close" aria-label="Close" onClick={() => setMessage('')}></button>
+                    </div>
+                )}
+                {error && (
+                    <div className="alert alert-danger alert-dismissible fade show w-75" role="alert">
+                        {error}
+                        <button type="button" className="btn-close" aria-label="Close" onClick={() => setError('')}></button>
+                    </div>
+                )}
+            </div>
+
             <h2>Admin User Management</h2>
-            {error && <div className="alert alert-danger">{error}</div>}
 
             {/* Add New User Form */}
             <div className="card p-3 mb-4">
@@ -155,7 +184,7 @@ function AdminUserManagement() {
                                     value={user.role}
                                     onChange={(e) => handleRoleChange(user.id, e.target.value)}
                                     className="form-select"
-                                    disabled={loggedAdmin && loggedAdmin.id === user.id} // Prevent admin from changing their own role
+                                    disabled={loggedAdmin && loggedAdmin.id === user.id}
                                 >
                                     <option value="factory_user">Factory User</option>
                                     <option value="client">Client</option>

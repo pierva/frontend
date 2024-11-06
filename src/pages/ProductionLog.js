@@ -3,19 +3,14 @@ import logService from '../services/logService';
 
 function ProductionLog() {
     const [products, setProducts] = useState([]);
-    const [selectedProduct, setSelectedProduct] = useState('');
-    const [quantity, setQuantity] = useState('');
-    const [lotCode, setLotCode] = useState('');
     const [logs, setLogs] = useState([]);
     const [message, setMessage] = useState('');
 
-    // State for sorting, date filtering, and search
+    // State for search, date range, and sorting
     const [sortConfig, setSortConfig] = useState({ key: 'date_logged', direction: 'ascending' });
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
-
-    // State for totals section
     const [totalsVisible, setTotalsVisible] = useState(false);
 
     // Fetch products and logs
@@ -35,41 +30,40 @@ function ProductionLog() {
         loadProductsAndLogs();
     }, []);
 
-    // Handle form submission
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!selectedProduct || !quantity || !lotCode) {
-            setMessage('Please fill out all fields.');
-            return;
-        }
+    // Search by Lot Code or Product Type
+    const filterLogsBySearchTerm = (logs) => {
+        return logs.filter((log) => {
+            const search = searchTerm.toLowerCase();
+            const productName = log.Product ? log.Product.name.toLowerCase() : '';
+            return (
+                log.lotCode.toLowerCase().includes(search) ||
+                productName.includes(search)
+            );
+        });
+    };
 
-        try {
-            await logService.addLog({
-                product: selectedProduct,
-                quantity,
-                lotCode,
-            });
+    // Filter by date range
+    const filterLogsByDate = (logs) => {
+        return logs.filter((log) => {
+            const logDate = new Date(log.date_logged).toISOString().split('T')[0];
+            const start = startDate ? new Date(startDate).toISOString().split('T')[0] : null;
+            const end = endDate ? new Date(endDate).toISOString().split('T')[0] : null;
 
-            setMessage(`Production log submitted for ${selectedProduct} (Lot Code: ${lotCode}, Quantity: ${quantity})`);
+            if (start && logDate < start) return false;
+            if (end && logDate > end) return false;
 
-            // Reload logs after adding a new log
-            const logsData = await logService.getLogs();
-            setLogs(logsData);
-
-            setSelectedProduct('');
-            setQuantity('');
-            setLotCode('');
-        } catch (error) {
-            console.error('Error submitting production log:', error);
-            setMessage('Error submitting production log.');
-        }
+            return true;
+        });
     };
 
     // Sorting function
     const sortLogs = (logs, key, direction) => {
         return [...logs].sort((a, b) => {
-            if (a[key] < b[key]) return direction === 'ascending' ? -1 : 1;
-            if (a[key] > b[key]) return direction === 'ascending' ? 1 : -1;
+            const aValue = key === 'product' ? a.Product?.name || '' : a[key];
+            const bValue = key === 'product' ? b.Product?.name || '' : b[key];
+
+            if (aValue < bValue) return direction === 'ascending' ? -1 : 1;
+            if (aValue > bValue) return direction === 'ascending' ? 1 : -1;
             return 0;
         });
     };
@@ -91,32 +85,7 @@ function ProductionLog() {
         return '';
     };
 
-    // Filter logs by search term (Lot Code or Product Type)
-    const filterLogsBySearchTerm = (logs) => {
-        return logs.filter((log) => {
-            const search = searchTerm.toLowerCase();
-            return (
-                log.lotCode.toLowerCase().includes(search) ||
-                log.product.toLowerCase().includes(search)
-            );
-        });
-    };
-
-    // Filter logs by the selected date range
-    const filterLogsByDate = (logs) => {
-        return logs.filter((log) => {
-            const logDate = new Date(log.date_logged).toISOString().split('T')[0];
-            const start = startDate ? new Date(startDate).toISOString().split('T')[0] : null;
-            const end = endDate ? new Date(endDate).toISOString().split('T')[0] : null;
-
-            if (start && logDate < start) return false;
-            if (end && logDate > end) return false;
-
-            return true;
-        });
-    };
-
-    // Get the sorted and filtered logs
+    // Apply search, date filter, and sorting
     const sortedLogs = sortLogs(logs, sortConfig.key, sortConfig.direction);
     const filteredLogsBySearch = filterLogsBySearchTerm(sortedLogs);
     const finalFilteredLogs = filterLogsByDate(filteredLogsBySearch);
@@ -124,7 +93,8 @@ function ProductionLog() {
     // Calculate totals
     const totalUnits = finalFilteredLogs.reduce((total, log) => total + log.quantity, 0);
     const totalByProductType = finalFilteredLogs.reduce((acc, log) => {
-        acc[log.product] = (acc[log.product] || 0) + log.quantity;
+        const productName = log.Product ? log.Product.name : 'Unknown Product';
+        acc[productName] = (acc[productName] || 0) + log.quantity;
         return acc;
     }, {});
 
@@ -217,7 +187,7 @@ function ProductionLog() {
                 <tbody>
                     {finalFilteredLogs.map((log) => (
                         <tr key={log.id}>
-                            <td>{log.product}</td>
+                            <td>{log.Product ? log.Product.name : 'Unknown Product'}</td>
                             <td>{log.quantity}</td>
                             <td>{log.lotCode}</td>
                             <td>{new Date(log.date_logged).toLocaleString()}</td>

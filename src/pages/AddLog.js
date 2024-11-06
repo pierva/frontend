@@ -1,22 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import logService from '../services/logService'; // Single service for both products and logs
+import logService from '../services/logService';
 
 function AddLog() {
-    const [products, setProducts] = useState([]); // Store available products
-    const [selectedProduct, setSelectedProduct] = useState(''); // Track selected product
-    const [quantity, setQuantity] = useState(''); // Track quantity
-    const [lotCode, setLotCode] = useState(''); // Track lot code
-    const [logs, setLogs] = useState([]); // Store production logs
+    const [products, setProducts] = useState([]);
+    const [selectedProduct, setSelectedProduct] = useState('');
+    const [quantity, setQuantity] = useState('');
+    const [lotCode, setLotCode] = useState('');
+    const [logs, setLogs] = useState([]);
     const [message, setMessage] = useState('');
 
-    // Fetch products and logs from the backend when the component mounts
     useEffect(() => {
         const loadProductsAndLogs = async () => {
             try {
-                const productsData = await logService.getProducts(); // Fetch products
+                const productsData = await logService.getProducts();
                 setProducts(productsData);
 
-                const logsData = await logService.getLogs(); // Fetch production logs
+                const logsData = await logService.getLogs();
                 setLogs(logsData || []);
             } catch (error) {
                 console.error('Error loading products or logs:', error);
@@ -26,93 +25,108 @@ function AddLog() {
         loadProductsAndLogs();
     }, []);
 
-    // Handle form submission for logging production
     const handleSubmit = async (e) => {
         e.preventDefault();
 
         if (!selectedProduct || !quantity || !lotCode) {
             setMessage('Please fill out all fields.');
+            autoDismissMessage();
             return;
         }
 
+        console.log(selectedProduct);
+        
         try {
-            // Send the production log data to the backend using logService
-
             await logService.addLog({
-                product: selectedProduct,   // Ensure we're sending the selected product
-                quantity,                   // Sending quantity
-                lotCode,                    // Ensure we're sending the lotCode
+                productId: selectedProduct,
+                quantity,
+                lotCode,
             });
 
             setMessage(`Production log submitted for ${selectedProduct} (Lot Code: ${lotCode}, Quantity: ${quantity})`);
+            autoDismissMessage();
 
-            // Reload logs to reflect the newly added entry
             const logsData = await logService.getLogs();
             setLogs(logsData);
 
-            // Reset form fields after submission
             setSelectedProduct('');
             setQuantity('');
             setLotCode('');
         } catch (error) {
             console.error('Error submitting production log:', error);
             setMessage('Error submitting production log.');
+            autoDismissMessage();
         }
     };
 
-  return (
-    <div className="container mt-5">
+    const autoDismissMessage = () => {
+        setTimeout(() => setMessage(''), 3000);
+    };
 
-      <h2>Add Production Log</h2>
+    const handleLotCodeChange = (e) => {
+        setLotCode(e.target.value.toUpperCase()); // Enforce uppercase
+    };
 
-      <form onSubmit={handleSubmit}>
-             <div className="form-group">
+    return (
+        <div className="container mt-5">
+            <h2>Add Production Log</h2>
+
+            {/* Alert Message */}
+            {message && (
+                <div className="fixed-top mt-5 d-flex justify-content-center">
+                    <div className="alert alert-success alert-dismissible fade show w-50" role="alert">
+                        {message}
+                        <button type="button" className="btn-close" onClick={() => setMessage('')}></button>
+                    </div>
+                </div>
+            )}
+
+            <form onSubmit={handleSubmit}>
+                <div className="form-group">
                     <label>Product</label>
                     <select
                         className="form-control"
                         value={selectedProduct}
-                        onChange={(e) => setSelectedProduct(e.target.value)} // Capture selected product
+                        onChange={(e) => setSelectedProduct(e.target.value)}
                         required
                     >
                         <option value="">Select a product</option>
                         {products.map((product) => (
-                            <option key={product.id} value={product.name}>
-                                {product.name} ({product.company})
+                            <option key={product.id} value={product.id}>
+                                {product.name}
                             </option>
                         ))}
                     </select>
                 </div>
 
-        <div className="form-group mt-3">
-          <label>Quantity</label>
-          <input
-            type="number"
-            className="form-control"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            required
-          />
+                <div className="form-group mt-3">
+                    <label>Quantity</label>
+                    <input
+                        type="number"
+                        className="form-control"
+                        value={quantity}
+                        onChange={(e) => setQuantity(e.target.value)}
+                        required
+                    />
+                </div>
+
+                <div className="form-group mt-3">
+                    <label>Lot Code</label>
+                    <input
+                        type="text"
+                        className="form-control"
+                        value={lotCode}
+                        onChange={handleLotCodeChange}
+                        required
+                    />
+                </div>
+
+                <button type="submit" className="btn btn-primary mt-3">
+                    Submit Production Log
+                </button>
+            </form>
         </div>
-
-        <div className="form-group mt-3">
-          <label>Lot Code</label>
-          <input
-            type="text"
-            className="form-control"
-            value={lotCode}
-            onChange={(e) => setLotCode(e.target.value)}
-            required
-          />
-        </div>
-
-        <button type="submit" className="btn btn-primary mt-3">
-          Submit Production Log
-        </button>
-      </form>
-
-      {message && <div className="mt-3 alert alert-info">{message}</div>}
-    </div>
-  );
+    );
 }
 
 export default AddLog;

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode'; // Import the correct named export for decoding the token
+import { jwtDecode } from 'jwt-decode'; 
 import logo from '../media/logo_text.png'; 
 
 function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [userRole, setUserRole] = useState(''); // Track user role
   const location = useLocation();
 
   // Check login status and role
@@ -14,10 +14,10 @@ function Navbar() {
     if (token) {
       setIsLoggedIn(true);
       const decodedToken = jwtDecode(token);
-      setIsAdmin(decodedToken.role === 'admin');
+      setUserRole(decodedToken.role);
     } else {
       setIsLoggedIn(false);
-      setIsAdmin(false);
+      setUserRole('');
     }
   };
 
@@ -29,7 +29,7 @@ function Navbar() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     setIsLoggedIn(false);
-    setIsAdmin(false);
+    setUserRole('');
     window.location.href = '/'; // Redirect to login
   };
 
@@ -47,9 +47,9 @@ function Navbar() {
         }}
       >
         <div className="container-fluid">
-        <Link className="navbar-brand d-flex align-items-center" to="/">
+          <Link className="navbar-brand d-flex align-items-center" to="/">
             <img
-              src={logo} // Replace with your logo path
+              src={logo}
               alt="Company Logo"
               style={{ height: '40px', marginRight: '10px' }} // Adjust size as needed
             />
@@ -75,12 +75,16 @@ function Navbar() {
                       Production Logs
                     </Link>
                   </li>
-                  <li className="nav-item">
-                    <Link className="nav-link" to="/add-log">
-                      Add Log
-                    </Link>
-                  </li>
-                  {isAdmin && (
+                  {/* Only show "Add Log" for admin and factory_team */}
+                  {(userRole === 'admin' || userRole === 'factory_team') && (
+                    <li className="nav-item">
+                      <Link className="nav-link" to="/add-log">
+                        Add Log
+                      </Link>
+                    </li>
+                  )}
+                  {/* Only show these links for admin users */}
+                  {userRole === 'admin' && (
                     <>
                       <li className="nav-item">
                         <Link className="nav-link" to="/admin/products">

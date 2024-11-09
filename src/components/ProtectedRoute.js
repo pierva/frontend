@@ -2,28 +2,29 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode'; // Import jwtDecode as a named import
 
-const ProtectedRoute = ({ children, adminOnly = false }) => {
+const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const token = localStorage.getItem('token');
 
   if (!token) {
     // If no token, redirect to the login page
     return <Navigate to="/" />;
   }
+
   try {
     const decodedToken = jwtDecode(token);
-    const isAdmin = decodedToken.role === 'admin';
+    const userRole = decodedToken.role;
 
-    // If adminOnly is true and the user is not an admin, redirect to the login page or show an error
-    if (adminOnly && !isAdmin) {
+    // If allowedRoles is specified and the user's role is not in it, redirect
+    if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
       return <Navigate to="/" />;
     }
 
-    // If logged in (and has admin rights if required), render the protected content
+    // If the user is allowed, render the protected content
     return children;
   } catch (error) {
     // In case of token decoding failure, redirect to login
     return <Navigate to="/" />;
   }
-}
+};
 
 export default ProtectedRoute;

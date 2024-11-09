@@ -16,23 +16,28 @@ function App() {
         {/* Public route for login */}
         <Route path="/" element={<Login />} />
 
-        {/* Protected routes for logged-in users */}
+        {/* Protected routes for all logged-in users */}
         <Route path="/logs" element={<ProtectedRoute><ProductionLog /></ProtectedRoute>} />
-        <Route path="/add-log" element={<ProtectedRoute><AddLog /></ProtectedRoute>} />
+
+        {/* Protected route for adding logs (admin and factory_team only) */}
+        <Route path="/add-log" element={
+          <ProtectedRoute allowedRoles={['admin', 'factory_team']}>
+            <AddLog />
+          </ProtectedRoute>
+        } />
 
         {/* Admin-only routes */}
         <Route path="/admin/products" element={
-          <ProtectedRoute adminOnly={true}>
+          <ProtectedRoute allowedRoles={['admin']}>
             <AdminProductPage />
           </ProtectedRoute>
         } />
-        
+
         <Route path="/admin/users" element={
-          <ProtectedRoute adminOnly={true}>
+          <ProtectedRoute allowedRoles={['admin']}>
             <AdminUserManagement />
           </ProtectedRoute>
         } />
-        
       </Routes>
     </Router>
   );

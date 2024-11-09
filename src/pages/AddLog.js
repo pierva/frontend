@@ -33,8 +33,6 @@ function AddLog() {
             autoDismissMessage();
             return;
         }
-
-        console.log(selectedProduct);
         
         try {
             await logService.addLog({

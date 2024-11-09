@@ -4,32 +4,39 @@ const API_URL = process.env.REACT_APP_API_URL;
 
 function AdminUserManagement() {
     const [users, setUsers] = useState([]);
+    const [companies, setCompanies] = useState([]); // List of companies
     const [error, setError] = useState('');
-    const [newUser, setNewUser] = useState({ username: '', password: '', role: 'factory_team' });
+    const [newUser, setNewUser] = useState({ username: '', password: '', role: 'factory_team', companyId: '' });
     const [passwordChanges, setPasswordChanges] = useState({});
     const [loggedAdmin, setLoggedAdmin] = useState(null);
     const [message, setMessage] = useState('');
 
     useEffect(() => {
-        const fetchUsers = async () => {
+        const fetchUsersAndCompanies = async () => {
             try {
                 const token = localStorage.getItem('token');
-                const decodedToken = JSON.parse(atob(token.split('.')[1])); // Decode token payload
+                const decodedToken = JSON.parse(atob(token.split('.')[1]));
                 setLoggedAdmin(decodedToken);
 
-                const response = await axios.get(`${API_URL}/api/users`, {
+                // Fetch users
+                const usersResponse = await axios.get(`${API_URL}/api/users`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
-                setUsers(response.data);
-                console.log(users);
+                setUsers(usersResponse.data);
+
+                // Fetch companies
+                const companiesResponse = await axios.get(`${API_URL}/api/companies`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                setCompanies(companiesResponse.data);
                 
             } catch (error) {
-                setError('Error fetching users. Only admins can access this page.');
+                setError('Error fetching data. Only admins can access this page.');
                 autoDismissMessage('error');
             }
         };
 
-        fetchUsers();
+        fetchUsersAndCompanies();
     }, []);
 
     const handleRoleChange = async (userId, newRole) => {
@@ -79,17 +86,27 @@ function AdminUserManagement() {
     };
 
     const handleAddUser = async () => {
+        // Create a copy of the newUser object
+        let userPayload = { ...newUser };
+    
+        // Remove companyId if the role is not 'client'
+        if (userPayload.role !== 'client') {
+            delete userPayload.companyId; // Remove the companyId field
+        }
+    
+        console.log(userPayload); // Check the final payload
+    
         try {
             const token = localStorage.getItem('token');
             await axios.post(
                 `${API_URL}/api/users/register`,
-                newUser,
+                userPayload, // Send the cleaned user payload
                 {
                     headers: { Authorization: `Bearer ${token}` },
                 }
             );
             setMessage('New user added successfully');
-            setNewUser({ username: '', password: '', role: 'factory_team' });
+            setNewUser({ username: '', password: '', role: 'factory_team', companyId: '' });
             const response = await axios.get(`${API_URL}/api/users`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -99,7 +116,7 @@ function AdminUserManagement() {
             setError('Failed to add user.');
             autoDismissMessage('error');
         }
-    };
+    };    
 
     const autoDismissMessage = (type) => {
         setTimeout(() => {
@@ -163,7 +180,37 @@ function AdminUserManagement() {
                         <option value="admin">Admin</option>
                     </select>
                 </div>
-                <button className="btn btn-primary mt-2" onClick={handleAddUser}>Add User</button>
+
+                {/* Company selection for client role */}
+                {newUser.role === 'client' && (
+                    <div className="form-group mb-2">
+                        <label>Company</label>
+                        <select
+                            className="form-select"
+                            value={newUser.companyId}
+                            onChange={(e) => setNewUser({ ...newUser, companyId: e.target.value })}
+                            disabled={companies.length === 0} // Disable if no companies
+                        >
+                            {companies.length > 0 ? (
+                                <>
+                                    <option value="">Select a company</option>
+                                    {companies.map((company) => (
+                                        <option key={company.id} value={company.id}>{company.name}</option>
+                                    ))}
+                                </>
+                            ) : (
+                                <option value="">No companies available. Register a company first.</option>
+                            )}
+                        </select>
+                    </div>
+                )}
+                <button
+                    className="btn btn-primary mt-2"
+                    onClick={handleAddUser}
+                    disabled={newUser.role === 'client' && (!newUser.companyId || companies.length === 0)} // Disable if client and no company selected
+                >
+                    Add User
+                </button>
             </div>
 
             {/* Users Table */}
@@ -172,6 +219,7 @@ function AdminUserManagement() {
                     <tr>
                         <th>Username</th>
                         <th>Role</th>
+                        <th>Company</th>
                         <th>Change Role</th>
                         <th>Change Password</th>
                     </tr>
@@ -181,6 +229,7 @@ function AdminUserManagement() {
                         <tr key={user.id}>
                             <td>{user.username}</td>
                             <td>{user.role}</td>
+                            <td>{user.role === 'client' ? user.Company?.name || 'Not assigned' : 'All companies'}</td>
                             <td>
                                 <select
                                     value={user.role}

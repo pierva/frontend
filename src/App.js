@@ -7,6 +7,8 @@ import ProductionLog from './pages/ProductionLog';
 import AddLog from './pages/AddLog';
 import AdminProductPage from './pages/AdminProductPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import TraceabilityPage from './pages/TraceabilityPage';
+
 
 function App() {
   return (
@@ -25,6 +27,8 @@ function App() {
             <AddLog />
           </ProtectedRoute>
         } />
+
+        <Route path="/traceability" element={<ProtectedRoute><TraceabilityPage /></ProtectedRoute>} />
 
         {/* Admin-only routes */}
         <Route path="/admin/products" element={

@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
+import PrintTraceabilityView from '../components/PrintTraceabilityView';
 const API_URL = process.env.REACT_APP_API_URL;
 
 function TraceabilityPage() {
@@ -18,6 +19,7 @@ function TraceabilityPage() {
     const [searchLotCode, setSearchLotCode] = useState('');
     const [isEditing, setIsEditing] = useState(false);
     const [editLogId, setEditLogId] = useState(null);
+    const printRef = useRef();
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -145,6 +147,15 @@ function TraceabilityPage() {
         setIsEditing(true);
     };
 
+    const handlePrint = () => {
+        const printContent = printRef.current.innerHTML;
+        const originalContent = document.body.innerHTML;
+        document.body.innerHTML = printContent;
+        window.print();
+        document.body.innerHTML = originalContent;
+        window.location.reload(); // Reload to restore original page content
+    };
+
     return (
         <div className="container mt-5">
             {message && (
@@ -157,6 +168,13 @@ function TraceabilityPage() {
             )}
 
             <h2>Traceability Page</h2>
+
+   {/* Print button */}
+   {logs.length > 0 && (
+                <button className="btn btn-secondary mt-3" onClick={handlePrint}>
+                    Print View
+                </button>
+            )}
 
             {/* Search by Lot Code */}
             <div className="mb-3">
@@ -298,6 +316,11 @@ function TraceabilityPage() {
                     ))}
                 </tbody>
             </table>
+
+            {/* Hidden print section */}
+            <div ref={printRef} style={{ display: 'none' }}>
+                <PrintTraceabilityView logs={filteredLogs.length > 0 ? filteredLogs : logs} />
+            </div>
         </div>
     );
 }

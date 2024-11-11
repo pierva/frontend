@@ -27,26 +27,29 @@ function AddLog() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-
+    
         if (!selectedProduct || !quantity || !lotCode) {
             setMessage('Please fill out all fields.');
             autoDismissMessage();
             return;
         }
-        
+    
+        // Trim and convert the lot code to uppercase before saving
+        const formattedLotCode = lotCode.trim().toUpperCase();
+    
         try {
             await logService.addLog({
                 productId: selectedProduct,
                 quantity,
-                lotCode,
+                lotCode: formattedLotCode, // Use the formatted lot code
             });
-
-            setMessage(`Production log submitted for ${selectedProduct} (Lot Code: ${lotCode}, Quantity: ${quantity})`);
+    
+            setMessage(`Production log submitted for ${selectedProduct} (Lot Code: ${formattedLotCode}, Quantity: ${quantity})`);
             autoDismissMessage();
-
+    
             const logsData = await logService.getLogs();
             setLogs(logsData);
-
+    
             setSelectedProduct('');
             setQuantity('');
             setLotCode('');

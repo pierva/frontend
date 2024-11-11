@@ -25,6 +25,33 @@ function AddLog() {
         loadProductsAndLogs();
     }, []);
 
+       // Function to generate the PIZZACINI lot code
+       const generatePizzaciniLotCode = () => {
+        const today = new Date();
+        const year = today.getFullYear().toString().slice(-2); // Last two digits of the year
+        const day = String(today.getDate()).padStart(2, '0'); // Day of the month, zero-padded
+        const monthLetters = 'ABCDEFGHIJKL'; // Mapping months to letters
+        const month = monthLetters[today.getMonth()]; // Get the letter for the current month
+
+        return `${month}-1${year}${day}1`; // Format: L-1YYDD1
+    };
+
+      // Handle product change to pre-fill lot code for PIZZACINI products
+      const handleProductChange = (e) => {
+        const selectedProductId = e.target.value;
+        setSelectedProduct(selectedProductId);
+
+        // Find the selected product in the products list
+        const selectedProductData = products.find(product => product.id === parseInt(selectedProductId));
+
+        // Check if the selected product belongs to PIZZACINI
+        if (selectedProductData && selectedProductData.Company && selectedProductData.Company.name === 'PIZZACINI') {
+            setLotCode(generatePizzaciniLotCode());
+        } else {
+            setLotCode(''); // Clear lot code if not PIZZACINI
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
     
@@ -82,13 +109,13 @@ function AddLog() {
                 </div>
             )}
 
-            <form onSubmit={handleSubmit}>
+<form onSubmit={handleSubmit}>
                 <div className="form-group">
                     <label>Product</label>
                     <select
                         className="form-control"
                         value={selectedProduct}
-                        onChange={(e) => setSelectedProduct(e.target.value)}
+                        onChange={handleProductChange}
                         required
                     >
                         <option value="">Select a product</option>

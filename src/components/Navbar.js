@@ -80,6 +80,11 @@ function Navbar() {
                       Traceability
                     </Link>
                   </li>
+                  <li className="nav-item">
+                    <Link className="nav-link" to="/inventory">
+                        Inventory
+                    </Link>
+                  </li>
                   {/* Only show "Add Log" for admin and factory_team */}
                   {(userRole === 'admin' || userRole === 'factory_team') && (
                     <li className="nav-item">

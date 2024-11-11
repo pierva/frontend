@@ -8,6 +8,7 @@ import AddLog from './pages/AddLog';
 import AdminProductPage from './pages/AdminProductPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import TraceabilityPage from './pages/TraceabilityPage';
+import InventoryPage from './pages/InventoryPage';
 
 
 function App() {
@@ -36,6 +37,8 @@ function App() {
             <AdminProductPage />
           </ProtectedRoute>
         } />
+
+      <Route path="/inventory" element={<ProtectedRoute><InventoryPage /></ProtectedRoute>} />
 
         <Route path="/admin/users" element={
           <ProtectedRoute allowedRoles={['admin']}>

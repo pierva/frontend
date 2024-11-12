@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { QRCodeCanvas } from 'qrcode.react'; // Use QRCodeCanvas or QRCodeSVG
 import logService from '../services/logService';
 
 function AddLog() {
@@ -8,6 +9,7 @@ function AddLog() {
     const [lotCode, setLotCode] = useState('');
     const [logs, setLogs] = useState([]);
     const [message, setMessage] = useState('');
+    const [generatedQRCode, setGeneratedQRCode] = useState(''); // State for QR code data
 
     useEffect(() => {
         const loadProductsAndLogs = async () => {
@@ -25,58 +27,54 @@ function AddLog() {
         loadProductsAndLogs();
     }, []);
 
-       // Function to generate the PIZZACINI lot code
-       const generatePizzaciniLotCode = () => {
+    const generatePizzaciniLotCode = () => {
         const today = new Date();
-        const year = today.getFullYear().toString().slice(-2); // Last two digits of the year
-        const day = String(today.getDate()).padStart(2, '0'); // Day of the month, zero-padded
-        const monthLetters = 'ABCDEFGHIJKL'; // Mapping months to letters
-        const month = monthLetters[today.getMonth()]; // Get the letter for the current month
+        const year = today.getFullYear().toString().slice(-2);
+        const day = String(today.getDate()).padStart(2, '0');
+        const monthLetters = 'ABCDEFGHIJKL';
+        const month = monthLetters[today.getMonth()];
 
-        return `${month}-1${year}${day}1`; // Format: L-1YYDD1
+        return `${month}-1${year}${day}1`;
     };
 
-      // Handle product change to pre-fill lot code for PIZZACINI products
-      const handleProductChange = (e) => {
+    const handleProductChange = (e) => {
         const selectedProductId = e.target.value;
         setSelectedProduct(selectedProductId);
 
-        // Find the selected product in the products list
         const selectedProductData = products.find(product => product.id === parseInt(selectedProductId));
-
-        // Check if the selected product belongs to PIZZACINI
         if (selectedProductData && selectedProductData.Company && selectedProductData.Company.name === 'PIZZACINI') {
             setLotCode(generatePizzaciniLotCode());
         } else {
-            setLotCode(''); // Clear lot code if not PIZZACINI
+            setLotCode('');
         }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-    
+
         if (!selectedProduct || !quantity || !lotCode) {
             setMessage('Please fill out all fields.');
             autoDismissMessage();
             return;
         }
-    
-        // Trim and convert the lot code to uppercase before saving
-        const formattedLotCode = lotCode.trim().toUpperCase();
-    
+
         try {
-            await logService.addLog({
+            const selectedProductName = products.find(product => product.id === parseInt(selectedProduct))?.name || 'Unknown Product';
+            const newLog = {
                 productId: selectedProduct,
                 quantity,
-                lotCode: formattedLotCode, // Use the formatted lot code
-            });
-    
-            setMessage(`Production log submitted for ${selectedProduct} (Lot Code: ${formattedLotCode}, Quantity: ${quantity})`);
+                lotCode: lotCode.trim().toUpperCase(), // Ensure uppercase and trimmed
+            };
+
+            await logService.addLog(newLog);
+
+            setMessage(`Production log submitted for ${selectedProductName} (Lot Code: ${lotCode}, Quantity: ${quantity})`);
+            setGeneratedQRCode(`Product: ${selectedProductName}\nDate: ${new Date().toLocaleDateString()}\nLot Code: ${lotCode}`); // Set QR code data
             autoDismissMessage();
-    
+
             const logsData = await logService.getLogs();
             setLogs(logsData);
-    
+
             setSelectedProduct('');
             setQuantity('');
             setLotCode('');
@@ -92,14 +90,13 @@ function AddLog() {
     };
 
     const handleLotCodeChange = (e) => {
-        setLotCode(e.target.value.toUpperCase()); // Enforce uppercase
+        setLotCode(e.target.value.toUpperCase());
     };
 
     return (
         <div className="container mt-5">
             <h2>Add Production Log</h2>
 
-            {/* Alert Message */}
             {message && (
                 <div className="fixed-top mt-5 d-flex justify-content-center">
                     <div className="alert alert-success alert-dismissible fade show w-50" role="alert">
@@ -109,7 +106,7 @@ function AddLog() {
                 </div>
             )}
 
-<form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit}>
                 <div className="form-group">
                     <label>Product</label>
                     <select

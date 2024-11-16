@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { QRCodeCanvas } from 'qrcode.react'; // Use QRCodeCanvas or QRCodeSVG
 import logService from '../services/logService';
 
 function AddLog() {
@@ -9,7 +8,6 @@ function AddLog() {
     const [lotCode, setLotCode] = useState('');
     const [logs, setLogs] = useState([]);
     const [message, setMessage] = useState('');
-    const [generatedQRCode, setGeneratedQRCode] = useState(''); // State for QR code data
 
     useEffect(() => {
         const loadProductsAndLogs = async () => {
@@ -69,7 +67,6 @@ function AddLog() {
             await logService.addLog(newLog);
 
             setMessage(`Production log submitted for ${selectedProductName} (Lot Code: ${lotCode}, Quantity: ${quantity})`);
-            setGeneratedQRCode(`Product: ${selectedProductName}\nDate: ${new Date().toLocaleDateString()}\nLot Code: ${lotCode}`); // Set QR code data
             autoDismissMessage();
 
             const logsData = await logService.getLogs();

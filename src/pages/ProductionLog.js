@@ -4,7 +4,6 @@ import logService from '../services/logService';
 function ProductionLog() {
     const [products, setProducts] = useState([]);
     const [logs, setLogs] = useState([]);
-    const [message, setMessage] = useState('');
 
     // State for search, date range, and sorting
     const [sortConfig, setSortConfig] = useState({ key: 'date_logged', direction: 'ascending' });

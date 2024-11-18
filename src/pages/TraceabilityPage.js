@@ -38,6 +38,8 @@ function TraceabilityPage() {
                 });
                 setLogs(logsResponse.data);
             } catch (error) {
+                setMessage('Error fetching initial data:', error);
+                setMessageType('danger');
                 console.error('Error fetching initial data:', error);
             }
         };
@@ -120,7 +122,7 @@ function TraceabilityPage() {
         } catch (error) {
             console.error('Error adding/updating traceability record:', error);
             setMessage('Error adding/updating traceability record');
-            setMessageType('error');
+            setMessageType('danger');
             autoDismissMessage();
         }
     };
@@ -159,7 +161,7 @@ function TraceabilityPage() {
     return (
         <div className="container mt-5">
             {message && (
-                <div className={`fixed-top mt-5 d-flex justify-content-center`}>
+                <div className="fixed-top mt-5 d-flex justify-content-center">
                     <div className={`alert alert-${messageType} alert-dismissible fade show w-50`} role="alert">
                         {message}
                         <button type="button" className="btn-close" onClick={() => setMessage('')}></button>
@@ -167,10 +169,11 @@ function TraceabilityPage() {
                 </div>
             )}
 
+
             <h2>Traceability Page</h2>
 
-   {/* Print button */}
-   {logs.length > 0 && (
+            {/* Print button */}
+            {logs.length > 0 && (
                 <button className="btn btn-secondary mt-3" onClick={handlePrint}>
                     Print View
                 </button>

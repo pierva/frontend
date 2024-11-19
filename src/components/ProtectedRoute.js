@@ -13,6 +13,13 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   try {
     const decodedToken = jwtDecode(token);
     const userRole = decodedToken.role;
+    const currentTime = Math.floor(Date.now() / 1000); // Current time in seconds
+
+    // Check if token is expired
+    if (decodedToken.exp < currentTime) {
+      // Redirect to login if the token has expired
+      return <Navigate to="/" />;
+    }
 
     // If allowedRoles is specified and the user's role is not in it, redirect
     if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {

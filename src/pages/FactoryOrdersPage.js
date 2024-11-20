@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ordersService from '../services/ordersService';
+import { FaEdit, FaTrash, FaCheck } from 'react-icons/fa'; // Import icons
 
 function FactoryOrdersPage() {
     const [orders, setOrders] = useState([]);
@@ -7,7 +8,7 @@ function FactoryOrdersPage() {
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
     const [userRole, setUserRole] = useState('');
-    const [editingOrder, setEditingOrder] = useState(null); // Holds the order being edited
+    const [editingOrder, setEditingOrder] = useState(null);
 
     useEffect(() => {
         const fetchOrders = async () => {
@@ -35,20 +36,19 @@ function FactoryOrdersPage() {
     const handleFulfillOrder = async (orderId) => {
         try {
             const lotCode = lotCodes[orderId]?.trim().toUpperCase();
-    
             if (!lotCode) {
                 setError('Lot code is required.');
                 return;
             }
-    
-            // Use the updated ordersService method
+
             await ordersService.fulfillOrder(orderId, lotCode);
-    
+
             setMessage('Order fulfilled successfully.');
-            setOrders(orders.filter((order) => order.id !== orderId)); // Remove the fulfilled order from the list
+            setOrders(orders.filter((order) => order.id !== orderId)); // Remove the fulfilled order
         } catch (err) {
             console.error('Error fulfilling order:', err);
             setError('Failed to fulfill order.');
+            autoDismissMessage('error');
         }
     };
 
@@ -57,7 +57,7 @@ function FactoryOrdersPage() {
             await ordersService.deleteOrder(orderId);
             setMessage('Order deleted successfully.');
             autoDismissMessage('success');
-            setOrders(orders.filter((order) => order.id !== orderId)); // Remove deleted order from the list
+            setOrders(orders.filter((order) => order.id !== orderId)); // Remove deleted order
         } catch (err) {
             console.error('Error deleting order:', err);
             setError('Failed to delete order.');
@@ -75,7 +75,7 @@ function FactoryOrdersPage() {
             await ordersService.updateOrder(editingOrder.id, editingOrder);
             setMessage('Order updated successfully.');
             autoDismissMessage('success');
-            setEditingOrder(null); // Exit edit mode
+            setEditingOrder(null);
 
             const updatedOrders = await ordersService.getOrders();
             setOrders(updatedOrders);
@@ -110,7 +110,6 @@ function FactoryOrdersPage() {
                 </div>
             )}
 
-            {/* Editing Form */}
             {editingOrder && (
                 <form onSubmit={handleUpdateOrder} className="mb-4">
                     <h4>Update Order</h4>
@@ -172,14 +171,14 @@ function FactoryOrdersPage() {
                 </form>
             )}
 
-            {/* Orders Table */}
             <table className="table table-bordered mt-3">
                 <thead>
                     <tr>
                         <th>Product</th>
                         <th>Quantity</th>
                         <th>Date of Delivery</th>
-                        <th>Lot Code</th>
+                        <th>Client</th>
+                        {userRole === 'factory_team' && <th>Lot Code</th>}
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -189,15 +188,18 @@ function FactoryOrdersPage() {
                             <td>{order.Product?.name || 'N/A'}</td>
                             <td>{order.quantity}</td>
                             <td>{new Date(order.date_of_delivery).toLocaleDateString()}</td>
-                            <td>
-                                <input
-                                    type="text"
-                                    className="form-control"
-                                    value={lotCodes[order.id] || ''}
-                                    onChange={(e) => handleLotCodeChange(order.id, e.target.value)}
-                                    placeholder="Enter Lot Code"
-                                />
-                            </td>
+                            <td>{order.client}</td>
+                            {userRole === 'factory_team' && (
+                                <td>
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        value={lotCodes[order.id] || ''}
+                                        onChange={(e) => handleLotCodeChange(order.id, e.target.value)}
+                                        placeholder="Enter Lot Code"
+                                    />
+                                </td>
+                            )}
                             <td>
                                 {userRole === 'admin' ? (
                                     <>
@@ -205,13 +207,13 @@ function FactoryOrdersPage() {
                                             className="btn btn-warning me-2"
                                             onClick={() => handleEditOrder(order)}
                                         >
-                                            Update
+                                            <FaEdit />
                                         </button>
                                         <button
                                             className="btn btn-danger"
                                             onClick={() => handleDeleteOrder(order.id)}
                                         >
-                                            Delete
+                                            <FaTrash />
                                         </button>
                                     </>
                                 ) : (
@@ -219,7 +221,7 @@ function FactoryOrdersPage() {
                                         className="btn btn-success"
                                         onClick={() => handleFulfillOrder(order.id)}
                                     >
-                                        Fulfill
+                                        <FaCheck />
                                     </button>
                                 )}
                             </td>

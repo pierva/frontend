@@ -9,6 +9,10 @@ import AdminProductPage from './pages/AdminProductPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import TraceabilityPage from './pages/TraceabilityPage';
 import InventoryPage from './pages/InventoryPage';
+import NotFoundPage from './pages/NotFoundPage'; // Import the 404 component
+import AdminOrdersPage from './pages/AdminOrdersPage';
+import FactoryOrdersPage from './pages/FactoryOrdersPage';
+
 
 
 function App() {
@@ -29,6 +33,10 @@ function App() {
           </ProtectedRoute>
         } />
 
+      <Route path="/admin/orders" element={<ProtectedRoute adminOnly={true}><AdminOrdersPage /></ProtectedRoute>} />
+      <Route path="/factory/orders" element={<ProtectedRoute><FactoryOrdersPage /></ProtectedRoute>} />
+
+
         <Route path="/traceability" element={<ProtectedRoute><TraceabilityPage /></ProtectedRoute>} />
 
         {/* Admin-only routes */}
@@ -45,6 +53,9 @@ function App() {
             <AdminUserManagement />
           </ProtectedRoute>
         } />
+
+        {/* 404 Route */}
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Router>
   );

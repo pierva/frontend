@@ -70,6 +70,7 @@ function Navbar() {
             <ul className="navbar-nav ms-auto">
               {isLoggedIn && (
                 <>
+                  {/* Links visible to all logged-in users */}
                   <li className="nav-item">
                     <Link className="nav-link" to="/logs">
                       Production Logs
@@ -82,20 +83,34 @@ function Navbar() {
                   </li>
                   <li className="nav-item">
                     <Link className="nav-link" to="/inventory">
-                        Inventory
+                      Inventory
                     </Link>
                   </li>
-                  {/* Only show "Add Log" for admin and factory_team */}
+
+                  {/* Links for factory_team and admin */}
                   {(userRole === 'admin' || userRole === 'factory_team') && (
-                    <li className="nav-item">
-                      <Link className="nav-link" to="/add-log">
-                        Add Log
-                      </Link>
-                    </li>
+                    <>
+                      <li className="nav-item">
+                        <Link className="nav-link" to="/add-log">
+                          Add Log
+                        </Link>
+                      </li>
+                      <li className="nav-item">
+                        <Link className="nav-link" to="/factory/orders">
+                          Manage Orders
+                        </Link>
+                      </li>
+                    </>
                   )}
-                  {/* Only show these links for admin users */}
+
+                  {/* Links for admin only */}
                   {userRole === 'admin' && (
                     <>
+                      <li className="nav-item">
+                        <Link className="nav-link" to="/admin/orders">
+                          Submit Orders
+                        </Link>
+                      </li>
                       <li className="nav-item">
                         <Link className="nav-link" to="/admin/products">
                           Create Product
@@ -108,6 +123,8 @@ function Navbar() {
                       </li>
                     </>
                   )}
+
+                  {/* Logout Button */}
                   <li className="nav-item">
                     <button className="btn btn-outline-danger" onClick={handleLogout}>
                       Logout
@@ -115,6 +132,7 @@ function Navbar() {
                   </li>
                 </>
               )}
+              {/* Login Link for unauthenticated users */}
               {!isLoggedIn && (
                 <li className="nav-item">
                   <Link className="nav-link" to="/">

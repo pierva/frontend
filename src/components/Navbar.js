@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode'; 
-import logo from '../media/logo_text.png'; 
+import { jwtDecode } from 'jwt-decode';
+import logo from '../media/logo_text.png';
 
 function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState(''); // Track user role
+  const [userRole, setUserRole] = useState('');
+  const [isExpanded, setIsExpanded] = useState(false); // Track navbar state
+  const navbarRef = useRef(); // Reference for the navbar element
   const location = useLocation();
 
   // Check login status and role
@@ -21,7 +23,26 @@ function Navbar() {
     }
   };
 
-  // useEffect to check login status on mount and route change
+  // Handle clicks outside the navbar
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        isExpanded &&
+        navbarRef.current &&
+        !navbarRef.current.contains(event.target)
+      ) {
+        setIsExpanded(false); // Collapse navbar
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isExpanded]);
+
+  // Check login status on mount and route change
   useEffect(() => {
     checkLoginStatus();
   }, [location]);
@@ -45,13 +66,14 @@ function Navbar() {
           width: '100%',
           zIndex: 1000,
         }}
+        ref={navbarRef} // Attach ref to navbar
       >
         <div className="container-fluid">
           <Link className="navbar-brand d-flex align-items-center" to="/">
             <img
               src={logo}
               alt="Company Logo"
-              style={{ height: '40px', marginRight: '10px' }} // Adjust size as needed
+              style={{ height: '40px', marginRight: '10px' }}
             />
             quickLOG
           </Link>
@@ -61,12 +83,16 @@ function Navbar() {
             data-bs-toggle="collapse"
             data-bs-target="#navbarNav"
             aria-controls="navbarNav"
-            aria-expanded="false"
+            aria-expanded={isExpanded ? 'true' : 'false'}
             aria-label="Toggle navigation"
+            onClick={() => setIsExpanded(!isExpanded)} // Toggle navbar state
           >
             <span className="navbar-toggler-icon"></span>
           </button>
-          <div className="collapse navbar-collapse" id="navbarNav">
+          <div
+            className={`collapse navbar-collapse ${isExpanded ? 'show' : ''}`} // Dynamically add "show" class
+            id="navbarNav"
+          >
             <ul className="navbar-nav ms-auto">
               {isLoggedIn && (
                 <>

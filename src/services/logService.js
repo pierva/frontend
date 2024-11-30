@@ -26,10 +26,20 @@ const addLog = async (logData) => {
   return response.data;
 };
 
+const addBatchLogs = async (batchData) => {
+  const token = localStorage.getItem('token');
+  const response = await axios.post(`${API_URL}/api/logs/batch-logs`, batchData, {
+      headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+
 const logService = {
   getLogs,
   getProducts,
   addLog,
+  addBatchLogs
 };
 
 export default logService;

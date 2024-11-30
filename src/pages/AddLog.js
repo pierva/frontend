@@ -1,28 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import logService from '../services/logService';
+import ingredientService from '../services/ingredientService';
 
 function AddLog() {
     const [products, setProducts] = useState([]);
-    const [selectedProduct, setSelectedProduct] = useState('');
-    const [quantity, setQuantity] = useState('');
-    const [lotCode, setLotCode] = useState('');
-    const [logs, setLogs] = useState([]);
+    const [ingredients, setIngredients] = useState([]);
     const [message, setMessage] = useState('');
+    const [lotCode, setLotCode] = useState('');
+    const [entries, setEntries] = useState([{ productId: '', quantity: '' }]);
+    const [ingredientEntries, setIngredientEntries] = useState([{ ingredientId: '', ingredientLotCode: '' }]);
 
     useEffect(() => {
-        const loadProductsAndLogs = async () => {
+        const loadInitialData = async () => {
             try {
                 const productsData = await logService.getProducts();
                 setProducts(productsData);
 
-                const logsData = await logService.getLogs();
-                setLogs(logsData || []);
+                const ingredientsData = await ingredientService.getIngredients();
+                setIngredients(ingredientsData);
+
+                // Generate default lot code for the batch
+                const defaultLotCode = generatePizzaciniLotCode();
+                setLotCode(defaultLotCode);
             } catch (error) {
-                console.error('Error loading products or logs:', error);
+                console.error('Error loading data:', error);
+                setMessage('Error loading data.');
+                autoDismissMessage();
             }
         };
 
-        loadProductsAndLogs();
+        loadInitialData();
     }, []);
 
     const generatePizzaciniLotCode = () => {
@@ -35,49 +42,59 @@ function AddLog() {
         return `${month}-1${year}${day}1`;
     };
 
-    const handleProductChange = (e) => {
-        const selectedProductId = e.target.value;
-        setSelectedProduct(selectedProductId);
+    const handleEntryChange = (index, field, value) => {
+        const updatedEntries = [...entries];
+        updatedEntries[index][field] = value;
+        setEntries(updatedEntries);
+    };
 
-        const selectedProductData = products.find(product => product.id === parseInt(selectedProductId));
-        if (selectedProductData && selectedProductData.Company && selectedProductData.Company.name === 'PIZZACINI') {
-            setLotCode(generatePizzaciniLotCode());
-        } else {
-            setLotCode('');
-        }
+    const handleIngredientChange = (index, field, value) => {
+        const updatedIngredientEntries = [...ingredientEntries];
+        updatedIngredientEntries[index][field] = value;
+        setIngredientEntries(updatedIngredientEntries);
+    };
+
+    const addEntry = () => {
+        setEntries([...entries, { productId: '', quantity: '' }]);
+    };
+
+    const addIngredientEntry = () => {
+        setIngredientEntries([...ingredientEntries, { ingredientId: '', ingredientLotCode: '' }]);
+    };
+
+    const removeEntry = (index) => {
+        setEntries(entries.filter((_, i) => i !== index));
+    };
+
+    const removeIngredientEntry = (index) => {
+        setIngredientEntries(ingredientEntries.filter((_, i) => i !== index));
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!selectedProduct || !quantity || !lotCode) {
-            setMessage('Please fill out all fields.');
+        if (entries.some(entry => !entry.productId || !entry.quantity)) {
+            setMessage('Please fill out all product fields.');
+            autoDismissMessage();
+            return;
+        }
+
+        if (ingredientEntries.some(entry => !entry.ingredientId || !entry.ingredientLotCode)) {
+            setMessage('Please fill out all ingredient fields.');
             autoDismissMessage();
             return;
         }
 
         try {
-            const selectedProductName = products.find(product => product.id === parseInt(selectedProduct))?.name || 'Unknown Product';
-            const newLog = {
-                productId: selectedProduct,
-                quantity,
-                lotCode: lotCode.trim().toUpperCase(), // Ensure uppercase and trimmed
-            };
-
-            await logService.addLog(newLog);
-
-            setMessage(`Production log submitted for ${selectedProductName} (Lot Code: ${lotCode}, Quantity: ${quantity})`);
+            await logService.addBatchLogs({ entries: entries.map(entry => ({ ...entry, lotCode })), ingredientEntries, lotCode }, );
+            setMessage('Production batch submitted successfully.');
             autoDismissMessage();
-
-            const logsData = await logService.getLogs();
-            setLogs(logsData);
-
-            setSelectedProduct('');
-            setQuantity('');
-            setLotCode('');
+            setEntries([{ productId: '', quantity: '' }]);
+            setIngredientEntries([{ ingredientId: '', ingredientLotCode: '' }]);
+            setLotCode(generatePizzaciniLotCode()); // Reset lot code to default
         } catch (error) {
-            console.error('Error submitting production log:', error);
-            setMessage('Error submitting production log.');
+            console.error('Error submitting batch logs:', error);
+            setMessage('Error submitting batch logs.');
             autoDismissMessage();
         }
     };
@@ -86,13 +103,9 @@ function AddLog() {
         setTimeout(() => setMessage(''), 3000);
     };
 
-    const handleLotCodeChange = (e) => {
-        setLotCode(e.target.value.toUpperCase());
-    };
-
     return (
         <div className="container mt-5">
-            <h2>Add Production Log</h2>
+            <h2>Add Production Batch</h2>
 
             {message && (
                 <div className="fixed-top mt-5 d-flex justify-content-center">
@@ -104,47 +117,100 @@ function AddLog() {
             )}
 
             <form onSubmit={handleSubmit}>
-                <div className="form-group">
-                    <label>Product</label>
-                    <select
-                        className="form-control"
-                        value={selectedProduct}
-                        onChange={handleProductChange}
-                        required
-                    >
-                        <option value="">Select a product</option>
-                        {products.map((product) => (
-                            <option key={product.id} value={product.id}>
-                                {product.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                <div className="form-group mt-3">
-                    <label>Quantity</label>
-                    <input
-                        type="number"
-                        className="form-control"
-                        value={quantity}
-                        onChange={(e) => setQuantity(e.target.value)}
-                        required
-                    />
-                </div>
-
-                <div className="form-group mt-3">
+                <h4>Batch Lot Code</h4>
+                <div className="form-group mb-3">
                     <label>Lot Code</label>
                     <input
                         type="text"
                         className="form-control"
                         value={lotCode}
-                        onChange={handleLotCodeChange}
+                        onChange={(e) => setLotCode(e.target.value)}
                         required
                     />
                 </div>
 
-                <button type="submit" className="btn btn-primary mt-3">
-                    Submit Production Log
+                <h4>Products</h4>
+                {entries.map((entry, index) => (
+                    <div key={index} className="row mb-3">
+                        <div className="col-md-5">
+                            <label>Product</label>
+                            <select
+                                className="form-control"
+                                value={entry.productId}
+                                onChange={(e) => handleEntryChange(index, 'productId', e.target.value)}
+                                required
+                            >
+                                <option value="">Select a product</option>
+                                {products.map(product => (
+                                    <option key={product.id} value={product.id}>
+                                        {product.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="col-md-5">
+                            <label>Quantity</label>
+                            <input
+                                type="number"
+                                className="form-control"
+                                value={entry.quantity}
+                                onChange={(e) => handleEntryChange(index, 'quantity', e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="col-md-2 d-flex align-items-end">
+                            <button type="button" className="btn btn-danger" onClick={() => removeEntry(index)}>
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                ))}
+                <button type="button" className="btn btn-secondary mb-3" onClick={addEntry}>
+                    Add Product
+                </button>
+
+                <h4>Ingredients</h4>
+                {ingredientEntries.map((ingredient, index) => (
+                    <div key={index} className="row mb-3">
+                        <div className="col-md-6">
+                            <label>Ingredient</label>
+                            <select
+                                className="form-control"
+                                value={ingredient.ingredientId}
+                                onChange={(e) => handleIngredientChange(index, 'ingredientId', e.target.value)}
+                                required
+                            >
+                                <option value="">Select an ingredient</option>
+                                {ingredients.map(ing => (
+                                    <option key={ing.id} value={ing.id}>
+                                        {ing.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="col-md-5">
+                            <label>Lot Code</label>
+                            <input
+                                type="text"
+                                className="form-control"
+                                value={ingredient.ingredientLotCode}
+                                onChange={(e) => handleIngredientChange(index, 'ingredientLotCode', e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="col-md-1 d-flex align-items-end">
+                            <button type="button" className="btn btn-danger" onClick={() => removeIngredientEntry(index)}>
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                ))}
+                <button type="button" className="btn btn-secondary mb-3" onClick={addIngredientEntry}>
+                    Add Ingredient
+                </button>
+
+                <button type="submit" className="btn btn-primary">
+                    Submit Production Batch
                 </button>
             </form>
         </div>

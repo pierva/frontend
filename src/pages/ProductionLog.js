@@ -2,46 +2,67 @@ import React, { useState, useEffect } from 'react';
 import logService from '../services/logService';
 
 function ProductionLog() {
-    const [products, setProducts] = useState([]);
     const [logs, setLogs] = useState([]);
+    const [ingredients, setIngredients] = useState([]);
+    const [selectedLog, setSelectedLog] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
-    // State for search, date range, and sorting
     const [sortConfig, setSortConfig] = useState({ key: 'date_logged', direction: 'ascending' });
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [totalsVisible, setTotalsVisible] = useState(false);
 
-    // Fetch products and logs
+    // Fetch logs and initialize
     useEffect(() => {
-        const loadProductsAndLogs = async () => {
+        const loadLogs = async () => {
             try {
-                const productsData = await logService.getProducts();
-                setProducts(productsData);
-
                 const logsData = await logService.getLogs();
+                
                 setLogs(logsData);
             } catch (error) {
-                console.error('Error loading products or logs:', error);
+                console.error('Error loading logs:', error);
             }
         };
 
-        loadProductsAndLogs();
+        loadLogs();
     }, []);
 
-    // Search by Lot Code or Product Type
+    // Fetch ingredients for a specific log
+    const fetchIngredients = async (batchId) => {
+        try {
+            const ingredientData = await logService.getIngredientsByLotCode(batchId);
+            setIngredients(ingredientData);
+        } catch (error) {
+            console.error('Error fetching ingredients:', error);
+        }
+    };
+
+    // Handle row click
+    const handleRowClick = (log) => {
+        setSelectedLog(log);
+        
+        fetchIngredients(log.batchId);
+        setIsModalOpen(true);
+    };
+
+    const closeModal = () => {
+        setSelectedLog(null);
+        setIngredients([]);
+        setIsModalOpen(false);
+    };
+
+    // Filter logs by search term
     const filterLogsBySearchTerm = (logs) => {
         return logs.filter((log) => {
             const search = searchTerm.toLowerCase();
-            const productName = log.Product ? log.Product.name.toLowerCase() : '';
-            return (
-                log.lotCode.toLowerCase().includes(search) ||
-                productName.includes(search)
-            );
+            const productName = log.Product?.name.toLowerCase() || '';
+            const lotCode = log.Batch?.lotCode.toLowerCase() || '';
+            return productName.includes(search) || lotCode.includes(search);
         });
     };
 
-    // Filter by date range
+    // Filter logs by date range
     const filterLogsByDate = (logs) => {
         return logs.filter((log) => {
             const logDate = new Date(log.date_logged).toISOString().split('T')[0];
@@ -55,7 +76,7 @@ function ProductionLog() {
         });
     };
 
-    // Sorting function
+    // Sorting logs
     const sortLogs = (logs, key, direction) => {
         return [...logs].sort((a, b) => {
             const aValue = key === 'product' ? a.Product?.name || '' : a[key];
@@ -67,7 +88,6 @@ function ProductionLog() {
         });
     };
 
-    // Handle column header clicks to toggle sorting
     const requestSort = (key) => {
         let direction = 'ascending';
         if (sortConfig.key === key && sortConfig.direction === 'ascending') {
@@ -76,7 +96,6 @@ function ProductionLog() {
         setSortConfig({ key, direction });
     };
 
-    // Get the sorting arrow based on the current sort direction
     const getArrow = (key) => {
         if (sortConfig.key === key) {
             return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
@@ -84,24 +103,22 @@ function ProductionLog() {
         return '';
     };
 
-    // Apply search, date filter, and sorting
     const sortedLogs = sortLogs(logs, sortConfig.key, sortConfig.direction);
     const filteredLogsBySearch = filterLogsBySearchTerm(sortedLogs);
     const finalFilteredLogs = filterLogsByDate(filteredLogsBySearch);
 
-    // Calculate totals
     const totalUnits = finalFilteredLogs.reduce((total, log) => total + log.quantity, 0);
     const totalByProductType = finalFilteredLogs.reduce((acc, log) => {
-        const productName = log.Product ? log.Product.name : 'Unknown Product';
+        const productName = log.Product?.name || 'Unknown Product';
         acc[productName] = (acc[productName] || 0) + log.quantity;
         return acc;
     }, {});
 
     return (
         <div className="container mt-5">
-            <h2 className='text-center'>Production Log</h2>
+            <h2 className="text-center">Production Log</h2>
 
-            {/* Search and Date Range Filters */}
+            {/* Filters */}
             <div className="mt-5">
                 <h3>Filter Logs</h3>
                 <div className="form-group">
@@ -140,7 +157,7 @@ function ProductionLog() {
                 </div>
             </div>
 
-            {/* Collapsible Totals Section */}
+            {/* Totals */}
             <div className="mt-4">
                 <button
                     className="btn btn-secondary"
@@ -172,28 +189,91 @@ function ProductionLog() {
                 )}
             </div>
 
-            {/* Production Logs Table */}
+            {/* Logs Table */}
             <h3 className="mt-5">Production Logs</h3>
             <table className="table table-bordered mt-3">
                 <thead>
                     <tr>
                         <th onClick={() => requestSort('product')}>Product {getArrow('product')}</th>
                         <th onClick={() => requestSort('quantity')}>Quantity {getArrow('quantity')}</th>
-                        <th onClick={() => requestSort('lotCode')}>Lot Code {getArrow('lotCode')}</th>
+                        <th onClick={() => requestSort('Batch.lotCode')}>Lot Code {getArrow('Batch.lotCode')}</th>
                         <th onClick={() => requestSort('date_logged')}>Date Logged {getArrow('date_logged')}</th>
                     </tr>
                 </thead>
                 <tbody>
                     {finalFilteredLogs.map((log) => (
-                        <tr key={log.id}>
-                            <td>{log.Product ? log.Product.name : 'Unknown Product'}</td>
+                        <tr
+                            key={log.id}
+                            onClick={() => handleRowClick(log)}
+                            style={{ cursor: 'pointer' }}
+                        >
+                            <td>{log.Product?.name || 'Unknown Product'}</td>
                             <td>{log.quantity}</td>
-                            <td>{log.lotCode}</td>
+                            <td>{log.Batch?.lotCode || 'N/A'}</td>
                             <td>{new Date(log.date_logged).toLocaleString()}</td>
                         </tr>
                     ))}
                 </tbody>
             </table>
+
+            {/* Ingredients Modal */}
+            {isModalOpen && selectedLog && (
+                <div className="modal show d-block" 
+                    tabIndex="-1" 
+                    role="dialog"
+                    style={{ marginTop: '75px' }} // Add margin from the top of the page
+                    >
+                    <div className="modal-dialog" 
+                        style={{
+                            WebkitBoxShadow: '0px -2px 17px -1px rgba(0,0,0,0.75)',
+                            MozBoxShadow: '0px -2px 17px -1px rgba(0,0,0,0.75)',
+                            boxShadow: '0px -2px 17px -1px rgba(0,0,0,0.75)', // Add shadow to the modal
+                        }}
+                    role="document">
+                        <div className="modal-content">
+                            <div className="modal-header"
+                                style={{
+                                    backgroundColor: '#1b2638', // Set background color
+                                    color: 'white', // Set text color
+                                }}
+                            >
+                                <h5 className="modal-title">
+                                    Ingredients for Lot Code: {selectedLog.Batch?.lotCode || 'N/A'}
+                                </h5>
+                                <button type="button" 
+                                    className="btn-close" 
+                                    style={{
+                                        filter: 'invert(1)', // Inverts the default black close button to white
+                                    }}
+                                    onClick={closeModal}>
+                                </button>
+                            </div>
+                            <div className="modal-body">
+                                {ingredients.length > 0 ? (
+                                    <table className="table table-bordered">
+                                        <thead>
+                                            <tr>
+                                                <th>Ingredient</th>
+                                                <th>Lot Code</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {ingredients.map((ingredient) => (
+                                                <tr key={ingredient.id}>
+                                                    <td>{ingredient.Ingredient?.name || 'Unknown'}</td>
+                                                    <td>{ingredient.ingredientLotCode}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : (
+                                    <p>No ingredients found for this log.</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

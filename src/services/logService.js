@@ -28,7 +28,16 @@ const addLog = async (logData) => {
 
 const addBatchLogs = async (batchData) => {
   const token = localStorage.getItem('token');
-  const response = await axios.post(`${API_URL}/api/logs/batch-logs`, batchData, {
+  const response = await axios.post(`${API_URL}/api/logs/batch`, batchData, {
+      headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+// Add the getIngredientsByLotCode method
+const getIngredientsByLotCode = async (batchId) => {
+  const token = localStorage.getItem('token');
+  const response = await axios.get(`${API_URL}/api/logs/${batchId}/ingredients`, {
       headers: { Authorization: `Bearer ${token}` },
   });
   return response.data;
@@ -39,7 +48,8 @@ const logService = {
   getLogs,
   getProducts,
   addLog,
-  addBatchLogs
+  addBatchLogs,
+  getIngredientsByLotCode
 };
 
 export default logService;

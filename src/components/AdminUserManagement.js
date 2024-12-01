@@ -94,8 +94,6 @@ function AdminUserManagement() {
             delete userPayload.companyId; // Remove the companyId field
         }
     
-        console.log(userPayload); // Check the final payload
-    
         try {
             const token = localStorage.getItem('token');
             await axios.post(

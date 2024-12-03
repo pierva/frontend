@@ -169,7 +169,7 @@ function ProductionLog() {
                     <div className="card mt-3 p-3">
                         <h4>Total Units: {totalUnits}</h4>
                         <h5>Breakdown by Product Type:</h5>
-                        <table className="table">
+                        <table className="table table-responsive-sm">
                             <thead>
                                 <tr>
                                     <th>Product Type</th>
@@ -191,7 +191,7 @@ function ProductionLog() {
 
             {/* Logs Table */}
             <h3 className="mt-5">Production Logs</h3>
-            <table className="table table-bordered mt-3">
+            <table className="table table-bordered mt-3 table-responsive-sm">
                 <thead>
                     <tr>
                         <th onClick={() => requestSort('product')}>Product {getArrow('product')}</th>
@@ -250,7 +250,7 @@ function ProductionLog() {
                             </div>
                             <div className="modal-body">
                                 {ingredients.length > 0 ? (
-                                    <table className="table table-bordered">
+                                    <table className="table table-bordered table-responsive-sm">
                                         <thead>
                                             <tr>
                                                 <th>Ingredient</th>

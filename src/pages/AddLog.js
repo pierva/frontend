@@ -86,7 +86,7 @@ function AddLog() {
         }
 
         try {
-            await logService.addBatchLogs({ entries: entries.map(entry => ({ ...entry, lotCode })), ingredientEntries, lotCode }, );
+            await logService.addBatchLogs({ entries: entries.map(entry => ({ ...entry, lotCode })), ingredientEntries, lotCode },);
             setMessage('Production batch submitted successfully.');
             autoDismissMessage();
             setEntries([{ productId: '', quantity: '' }]);
@@ -131,9 +131,9 @@ function AddLog() {
 
                 <h4>Products</h4>
                 {entries.map((entry, index) => (
-                    <div key={index} className="row mb-3">
-                        <div className="col-md-5">
-                            <label>Product</label>
+                    <div key={index} className="row mb-3 g-1">
+                        <div className="col-sm-5 col-12">
+                            <label className="form-label">Product</label>
                             <select
                                 className="form-control"
                                 value={entry.productId}
@@ -148,8 +148,8 @@ function AddLog() {
                                 ))}
                             </select>
                         </div>
-                        <div className="col-md-5">
-                            <label>Quantity</label>
+                        <div className="col-sm-5 col-12">
+                            <label className="form-label">Quantity</label>
                             <input
                                 type="number"
                                 className="form-control"
@@ -158,8 +158,12 @@ function AddLog() {
                                 required
                             />
                         </div>
-                        <div className="col-md-2 d-flex align-items-end">
-                            <button type="button" className="btn btn-danger" onClick={() => removeEntry(index)}>
+                        <div className="col-sm-2 col-12 d-flex align-items-end">
+                            <button
+                                type="button"
+                                className="btn btn-danger w-100"
+                                onClick={() => removeEntry(index)}
+                            >
                                 Remove
                             </button>
                         </div>
@@ -171,9 +175,9 @@ function AddLog() {
 
                 <h4>Ingredients</h4>
                 {ingredientEntries.map((ingredient, index) => (
-                    <div key={index} className="row mb-3">
-                        <div className="col-md-6">
-                            <label>Ingredient</label>
+                    <div key={index} className="row mb-3 g-1">
+                        <div className="col-md-5 col-12">
+                            <label className="form-label">Ingredient</label>
                             <select
                                 className="form-control"
                                 value={ingredient.ingredientId}
@@ -188,8 +192,8 @@ function AddLog() {
                                 ))}
                             </select>
                         </div>
-                        <div className="col-md-5">
-                            <label>Lot Code</label>
+                        <div className="col-md-5 col-12">
+                            <label className="form-label">Lot Code</label>
                             <input
                                 type="text"
                                 className="form-control"
@@ -198,20 +202,26 @@ function AddLog() {
                                 required
                             />
                         </div>
-                        <div className="col-md-1 d-flex align-items-end">
-                            <button type="button" className="btn btn-danger" onClick={() => removeIngredientEntry(index)}>
+                        <div className="col-md-2 col-12 d-flex align-items-end">
+                            <button
+                                type="button"
+                                className="btn btn-danger w-100"
+                                onClick={() => removeIngredientEntry(index)}
+                            >
                                 Remove
                             </button>
                         </div>
                     </div>
                 ))}
-                <button type="button" className="btn btn-secondary mb-3" onClick={addIngredientEntry}>
-                    Add Ingredient
-                </button>
+                <div className="d-flex justify-content-center gap-3 mb-3">
+                    <button type="button" className="btn btn-secondary" onClick={addIngredientEntry}>
+                        Add Ingredient
+                    </button>
+                    <button type="submit" className="btn btn-primary">
+                        Submit Production Batch
+                    </button>
+                </div>
 
-                <button type="submit" className="btn btn-primary">
-                    Submit Production Batch
-                </button>
             </form>
         </div>
     );

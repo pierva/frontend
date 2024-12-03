@@ -19,6 +19,13 @@ function TraceabilityPage() {
     const [searchLotCode, setSearchLotCode] = useState('');
     const [isEditing, setIsEditing] = useState(false);
     const [editLogId, setEditLogId] = useState(null);
+    // Search by ingredient lotCode
+    const [ingredientLotCode, setIngredientLotCode] = useState('');
+    const [ingredientProducts, setIngredientProducts] = useState([]);
+    const [ingredientBreakdown, setIngredientBreakdown] = useState([]);
+    const [isIngredientSearchActive, setIsIngredientSearchActive] = useState(false);
+
+
     const printRef = useRef();
 
     useEffect(() => {
@@ -125,6 +132,79 @@ function TraceabilityPage() {
             setMessageType('danger');
             autoDismissMessage();
         }
+    };
+
+    // Search products by ingredient lot code
+    const handleSearchIngredientLotCode = async () => {
+        if (!ingredientLotCode) {
+            setMessage('Please enter an ingredient lot code');
+            setMessageType('danger');
+            autoDismissMessage();
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(
+                `${API_URL}/api/traceability-logs/ingredient-lot-code`,
+                {
+                    params: { ingredientLotCode },
+                    headers: { Authorization: `Bearer ${token}` },
+                }
+            );
+
+            // Format the response data
+            const data = response.data;
+
+            // Breakdown for products
+            const breakdown = data.map((item) => ({
+                productName: item.productName,
+                batchLotCode: item.batchLotCode,
+                quantityProduced: item.quantityProduced,
+                quantityAllocated: item.quantityAllocated,
+                quantityInInventory: item.quantityInInventory,
+            }));
+
+            // Flatten client data for detailed view
+            const clients = data.flatMap((item) =>
+                item.clients.map((client) => ({
+                    customer: client.customer,
+                    productName: item.productName,
+                    batchLotCode: item.batchLotCode,
+                    quantity: client.quantity,
+                    date: client.date
+                }))
+            );
+
+            setIngredientBreakdown(breakdown);
+            setIngredientProducts(clients);
+            setIsIngredientSearchActive(true); // Activate ingredient search state
+        } catch (error) {
+            console.error('Error searching by ingredient lot code:', error);
+        
+            if (error.response) {
+                // Check if the error has a response from the API
+                if (error.response.status === 404) {
+                    // Display the error message from the API for 404
+                    setMessage(error.response.data.message || 'No data found for the given ingredient lot code.');
+                } else {
+                    // Generic error message for other HTTP errors
+                    setMessage('An error occurred: ' + (error.response.data.message || 'Please try again later.'));
+                }
+            } else {
+                // Fallback for network or unexpected errors
+                setMessage('Unable to fetch data. Please check your internet connection.');
+            }
+        
+            setMessageType('danger');
+            autoDismissMessage();
+        }        
+    };
+
+    const clearIngredientSearch = () => {
+        setIngredientLotCode('');
+        setIngredientProducts([]);
+        setIsIngredientSearchActive(false); // Reset ingredient search state
     };
 
     const autoDismissMessage = () => {
@@ -283,42 +363,127 @@ function TraceabilityPage() {
                 </form>
             )}
 
-            {/* Display logs */}
-            <table className="table table-bordered mt-3">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Product</th>
-                        <th>Lot Code</th>
-                        <th>Quantity</th>
-                        <th>Customer</th>
-                        <th>Logged By</th>
-                        {userRole === 'admin' && <th>Actions</th>}
-                    </tr>
-                </thead>
-                <tbody>
-                    {(filteredLogs.length > 0 ? filteredLogs : logs).map((log) => (
-                        <tr key={log.id}>
-                            <td>{new Date(log.date).toLocaleDateString()}</td>
-                            <td>{log.Product?.name || 'N/A'}</td>
-                            <td>{log.lotCode}</td>
-                            <td>{log.quantity}</td>
-                            <td>{log.customer}</td>
-                            <td>{log.logged_by || 'Unknown'}</td>
-                            {userRole === 'admin' && (
-                                <td>
-                                    <button
-                                        className="btn btn-warning btn-sm"
-                                        onClick={() => handleEdit(log)}
-                                    >
-                                        Edit
-                                    </button>
-                                </td>
-                            )}
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+            {/* Ingredient Lot Code Search */}
+            <div className="mb-4">
+                <h4>Search Products by Ingredient Lot Code</h4>
+                <div className="input-group mb-3">
+    <input
+        type="text"
+        className="form-control"
+        placeholder="Enter Ingredient Lot Code"
+        value={ingredientLotCode}
+        onChange={(e) => setIngredientLotCode(e.target.value)}
+    />
+    <button
+        className={`btn ${isIngredientSearchActive ? 'btn-secondary' : 'btn-primary'}`}
+        onClick={isIngredientSearchActive ? clearIngredientSearch : handleSearchIngredientLotCode}
+    >
+        {isIngredientSearchActive ? 'Clear Search' : 'Search'}
+    </button>
+</div>
+
+            </div>
+
+            {/* Display Results */}
+            {isIngredientSearchActive && ingredientBreakdown.length > 0 && (
+                <div className="mt-4">
+                    <h4>Products Breakdown with ingredient LOT: <b>{ingredientLotCode}</b></h4>
+                    <table className="table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Batch Lot Code</th>
+                                <th>Quantity Produced</th>
+                                <th>Quantity Allocated</th>
+                                <th>Quantity in Inventory</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {ingredientBreakdown.map((item, index) => (
+                                <tr key={index}>
+                                    <td>{item.productName}</td>
+                                    <td>{item.batchLotCode}</td>
+                                    <td>{item.quantityProduced}</td>
+                                    <td>{item.quantityAllocated}</td>
+                                    <td>{item.quantityInInventory}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {ingredientProducts.length > 0 && (
+                <div className="mt-4">
+                    <h4>Products Distributed to Clients</h4>
+                    <table className="table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Customer</th>
+                                <th>Product</th>
+                                <th>Batch Lot Code</th>
+                                <th>Quantity</th>
+                                <th>Date</th> {/* Add Date column */}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {ingredientProducts.map((client, index) => (
+                                <tr key={index}>
+                                    <td>{client.customer}</td>
+                                    <td>{client.productName}</td>
+                                    <td>{client.batchLotCode}</td>
+                                    <td>{client.quantity}</td>
+                                    <td>{new Date(client.date).toLocaleDateString()}</td> {/* Format Date */}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+
+
+            {/* Conditionally Render Traceability Table */}
+            {!isIngredientSearchActive && (
+                <div>
+                    <h3 className='mt-3'>Traceability Table</h3>
+                    <table className="table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Product</th>
+                                <th>Lot Code</th>
+                                <th>Quantity</th>
+                                <th>Customer</th>
+                                <th>Logged By</th>
+                                {userRole === 'admin' && <th>Actions</th>}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {(filteredLogs.length > 0 ? filteredLogs : logs).map((log) => (
+                                <tr key={log.id}>
+                                    <td>{new Date(log.date).toLocaleDateString()}</td>
+                                    <td>{log.Product?.name || 'N/A'}</td>
+                                    <td>{log.lotCode}</td>
+                                    <td>{log.quantity}</td>
+                                    <td>{log.customer}</td>
+                                    <td>{log.logged_by || 'Unknown'}</td>
+                                    {userRole === 'admin' && (
+                                        <td>
+                                            <button
+                                                className="btn btn-warning btn-sm"
+                                                onClick={() => handleEdit(log)}
+                                            >
+                                                Edit
+                                            </button>
+                                        </td>
+                                    )}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
 
             {/* Hidden print section */}
             <div ref={printRef} style={{ display: 'none' }}>

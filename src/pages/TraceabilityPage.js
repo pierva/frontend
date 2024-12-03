@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import PrintTraceabilityView from '../components/PrintTraceabilityView';
+// Use ReactDOM to render the component into the new window
+import { createRoot } from 'react-dom/client'; // Import this at the top of the file if not already done
 const API_URL = process.env.REACT_APP_API_URL;
 
 function TraceabilityPage() {
@@ -229,14 +231,77 @@ function TraceabilityPage() {
         setIsEditing(true);
     };
 
+    // const handlePrint = () => {
+    //     const printContent = printRef.current.innerHTML;
+    //     const originalContent = document.body.innerHTML;
+    //     document.body.innerHTML = printContent;
+    //     window.print();
+    //     document.body.innerHTML = originalContent;
+    //     window.location.reload(); // Reload to restore original page content
+    // };
     const handlePrint = () => {
-        const printContent = printRef.current.innerHTML;
-        const originalContent = document.body.innerHTML;
-        document.body.innerHTML = printContent;
-        window.print();
-        document.body.innerHTML = originalContent;
-        window.location.reload(); // Reload to restore original page content
+        // Create a new window
+        const printWindow = window.open('', '_blank');
+    
+        // Dynamically create the HTML content
+        const printContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Traceability Logs</title>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 20px;
+                    }
+                    h1 {
+                        text-align: center;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 20px;
+                    }
+                    th, td {
+                        border: 1px solid #ddd;
+                        padding: 8px;
+                        text-align: left;
+                    }
+                    th {
+                        background-color: #f4f4f4;
+                    }
+                </style>
+            </head>
+            <body>
+                <div id="print-content"></div>
+            </body>
+            </html>
+        `;
+    
+        // Write the initial HTML into the new window
+        printWindow.document.open();
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+    
+        // Inject the rendered content of PrintTraceabilityView into the new window
+        const container = printWindow.document.getElementById('print-content');
+        const renderedContent = <PrintTraceabilityView 
+            logs={filteredLogs.length > 0 ? filteredLogs : logs} 
+            ingredientBreakdown={ingredientBreakdown}
+            ingredientProducts={ingredientProducts}
+            isIngredientSearchActive={isIngredientSearchActive}
+            ingredientLotCode={ingredientLotCode} 
+            />;
+        
+        const root = createRoot(container);
+        root.render(renderedContent);
+    
+        // Trigger the print dialog after rendering
+        setTimeout(() => {
+            printWindow.print();
+        }, 500); // Delay to ensure the content is rendered before printing
     };
+    
 
     return (
         <div className="container mt-5">
@@ -491,7 +556,7 @@ function TraceabilityPage() {
 
             {/* Hidden print section */}
             <div ref={printRef} style={{ display: 'none' }}>
-                <PrintTraceabilityView logs={filteredLogs.length > 0 ? filteredLogs : logs} />
+                {/* <PrintTraceabilityView logs={filteredLogs.length > 0 ? filteredLogs : logs} /> */}
             </div>
         </div>
     );

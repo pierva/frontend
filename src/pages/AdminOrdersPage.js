@@ -27,6 +27,8 @@ function AdminOrdersPage() {
             await ordersService.createOrder(order);
             setMessage('Order created successfully');
             setMessageType('success');
+            console.log(order);
+            
             setOrder({ productId: '', quantity: '', date_of_delivery: '', client: '' });
             autoDismissMessage();
         } catch (error) {

@@ -71,7 +71,7 @@ function FactoryOrdersPage() {
 
     const handleUpdateOrder = async (e) => {
         e.preventDefault();
-        try {
+        try {            
             await ordersService.updateOrder(editingOrder.id, editingOrder);
             setMessage('Order updated successfully.');
             autoDismissMessage('success');
@@ -187,7 +187,7 @@ function FactoryOrdersPage() {
                         <tr key={order.id}>
                             <td>{order.Product?.name || 'N/A'}</td>
                             <td>{order.quantity}</td>
-                            <td>{new Date(order.date_of_delivery).toLocaleDateString()}</td>
+                            <td>{order.date_of_delivery}</td>
                             <td>{order.client}</td>
                             {userRole === 'factory_team' && (
                                 <td>

@@ -60,12 +60,19 @@ function TraceabilityPage() {
     const handleLotCodeInputChange = async (e) => {
         const input = e.target.value;
         setLotCode(input);
-
+    
         if (input.length > 2) {
             try {
                 const token = localStorage.getItem('token');
+                const params = { query: input };
+                
+                
+                // Include productId if selected
+                if (selectedProduct) {
+                    params.productId = selectedProduct;
+                }
                 const response = await axios.get(`${API_URL}/api/traceability-logs/search-lot-codes`, {
-                    params: { query: input },
+                    params,
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 setSuggestedLotCodes(response.data);
@@ -76,6 +83,7 @@ function TraceabilityPage() {
             setSuggestedLotCodes([]);
         }
     };
+    
 
     const handleSelectLotCode = (code) => {
         setLotCode(code);
@@ -231,15 +239,7 @@ function TraceabilityPage() {
         setEditLogId(log.id);
         setIsEditing(true);
     };
-
-    // const handlePrint = () => {
-    //     const printContent = printRef.current.innerHTML;
-    //     const originalContent = document.body.innerHTML;
-    //     document.body.innerHTML = printContent;
-    //     window.print();
-    //     document.body.innerHTML = originalContent;
-    //     window.location.reload(); // Reload to restore original page content
-    // };
+    
     const handlePrint = () => {
         // Create a new window
         const printWindow = window.open('', '_blank');

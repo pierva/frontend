@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import ordersService from '../services/ordersService';
 import { FaEdit, FaTrash, FaCheck } from 'react-icons/fa'; // Import icons
+
+const API_URL = process.env.REACT_APP_API_URL;
 
 function FactoryOrdersPage() {
     const [orders, setOrders] = useState([]);
     const [lotCodes, setLotCodes] = useState({});
+    const [suggestedLotCodes, setSuggestedLotCodes] = useState({}); // Store suggestions for each order
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
     const [userRole, setUserRole] = useState('');
@@ -29,8 +33,31 @@ function FactoryOrdersPage() {
         fetchOrders();
     }, []);
 
-    const handleLotCodeChange = (id, value) => {
-        setLotCodes({ ...lotCodes, [id]: value.trim().toUpperCase() }); // Enforce uppercase
+    const handleLotCodeChange = async (orderId, value, productId) => {
+        setLotCodes({ ...lotCodes, [orderId]: value.trim().toUpperCase() }); // Update input value
+
+        // Fetch suggestions if input length > 2
+        if (value.trim().length > 2) {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await axios.get(`${API_URL}/api/traceability-logs/search-lot-codes`, {
+                    params: { query: value.trim(), productId },
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                setSuggestedLotCodes({ ...suggestedLotCodes, [orderId]: response.data });
+            } catch (err) {
+                console.error('Error fetching lot codes:', err);
+                setError('Failed to fetch lot codes.');
+                autoDismissMessage('error');
+            }
+        } else {
+            setSuggestedLotCodes({ ...suggestedLotCodes, [orderId]: [] }); // Clear suggestions if input is short
+        }
+    };
+
+    const handleSelectLotCode = (orderId, lotCode) => {
+        setLotCodes({ ...lotCodes, [orderId]: lotCode });
+        setSuggestedLotCodes({ ...suggestedLotCodes, [orderId]: [] }); // Clear suggestions
     };
 
     const handleFulfillOrder = async (orderId) => {
@@ -110,7 +137,7 @@ function FactoryOrdersPage() {
                 </div>
             )}
 
-            {editingOrder && (
+{editingOrder && (
                 <form onSubmit={handleUpdateOrder} className="mb-4">
                     <h4>Update Order</h4>
                     <div className="form-group mt-3">
@@ -190,14 +217,37 @@ function FactoryOrdersPage() {
                             <td>{order.date_of_delivery}</td>
                             <td>{order.client}</td>
                             {userRole === 'factory_team' && (
-                                <td>
+                                <td className="position-relative">
                                     <input
                                         type="text"
                                         className="form-control"
                                         value={lotCodes[order.id] || ''}
-                                        onChange={(e) => handleLotCodeChange(order.id, e.target.value)}
+                                        onChange={(e) =>
+                                            handleLotCodeChange(order.id, e.target.value, order.productId)
+                                        }
                                         placeholder="Enter Lot Code"
                                     />
+                                    {suggestedLotCodes[order.id]?.length > 0 && (
+                                        <ul
+                                            className="list-group position-absolute w-100 mt-1"
+                                            style={{
+                                                maxHeight: '150px',
+                                                overflowY: 'auto',
+                                                zIndex: 1000,
+                                            }}
+                                        >
+                                            {suggestedLotCodes[order.id].map((lotCode, index) => (
+                                                <li
+                                                    key={index}
+                                                    className="list-group-item list-group-item-action"
+                                                    onClick={() => handleSelectLotCode(order.id, lotCode)}
+                                                    style={{ cursor: 'pointer' }}
+                                                >
+                                                    {lotCode}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
                                 </td>
                             )}
                             <td>

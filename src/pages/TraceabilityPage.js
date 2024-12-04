@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import PrintTraceabilityView from '../components/PrintTraceabilityView';
+import moment from 'moment';
 // Use ReactDOM to render the component into the new window
 import { createRoot } from 'react-dom/client'; // Import this at the top of the file if not already done
 const API_URL = process.env.REACT_APP_API_URL;
@@ -242,7 +243,7 @@ function TraceabilityPage() {
     const handlePrint = () => {
         // Create a new window
         const printWindow = window.open('', '_blank');
-    
+
         // Dynamically create the HTML content
         const printContent = `
             <!DOCTYPE html>
@@ -277,31 +278,31 @@ function TraceabilityPage() {
             </body>
             </html>
         `;
-    
+
         // Write the initial HTML into the new window
         printWindow.document.open();
         printWindow.document.write(printContent);
         printWindow.document.close();
-    
+
         // Inject the rendered content of PrintTraceabilityView into the new window
         const container = printWindow.document.getElementById('print-content');
-        const renderedContent = <PrintTraceabilityView 
-            logs={filteredLogs.length > 0 ? filteredLogs : logs} 
+        const renderedContent = <PrintTraceabilityView
+            logs={filteredLogs.length > 0 ? filteredLogs : logs}
             ingredientBreakdown={ingredientBreakdown}
             ingredientProducts={ingredientProducts}
             isIngredientSearchActive={isIngredientSearchActive}
-            ingredientLotCode={ingredientLotCode} 
-            />;
-        
+            ingredientLotCode={ingredientLotCode}
+        />;
+
         const root = createRoot(container);
         root.render(renderedContent);
-    
+
         // Trigger the print dialog after rendering
         setTimeout(() => {
             printWindow.print();
         }, 500); // Delay to ensure the content is rendered before printing
     };
-    
+
 
     return (
         <div className="container mt-5">
@@ -339,94 +340,94 @@ function TraceabilityPage() {
             {/* Form to add/edit a traceability record */}
             {(userRole !== 'client' || userRole === 'client') && (
                 <form onSubmit={handleSubmit} className="mb-4">
-                <div className="row">
-                    <div className="col-md-4 col-12">
-                        <label>Date</label>
-                        <input
-                            type="date"
-                            className="form-control"
-                            value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
-                            required
-                        />
-                    </div>
-                    <div className="col-md-4 col-12">
-                        <label>Product</label>
-                        <select
-                            className="form-control"
-                            value={selectedProduct}
-                            onChange={(e) => setSelectedProduct(e.target.value)}
-                            required
-                        >
-                            <option value="">Select a product</option>
-                            {products.map((product) => (
-                                <option key={product.id} value={product.id}>
-                                    {product.name}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="col-md-4 col-12 position-relative">
-                        <label>Lot Code</label>
-                        <input
-                            type="text"
-                            className="form-control"
-                            value={lotCode}
-                            onChange={handleLotCodeInputChange}
-                            placeholder="Enter or select a lot code"
-                            required
-                        />
-                        {suggestedLotCodes.length > 0 && (
-                            <ul
-                                className="list-group mt-2 position-absolute w-100"
-                                style={{
-                                    maxHeight: '150px',
-                                    overflowY: 'auto',
-                                    zIndex: 1000,
-                                }}
+                    <div className="row">
+                        <div className="col-md-4 col-12">
+                            <label>Date</label>
+                            <input
+                                type="date"
+                                className="form-control"
+                                value={selectedDate}
+                                onChange={(e) => setSelectedDate(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="col-md-4 col-12">
+                            <label>Product</label>
+                            <select
+                                className="form-control"
+                                value={selectedProduct}
+                                onChange={(e) => setSelectedProduct(e.target.value)}
+                                required
                             >
-                                {suggestedLotCodes.map((code, index) => (
-                                    <li
-                                        key={index}
-                                        className="list-group-item"
-                                        onClick={() => handleSelectLotCode(code)}
-                                        style={{ cursor: 'pointer' }}
-                                    >
-                                        {code}
-                                    </li>
+                                <option value="">Select a product</option>
+                                {products.map((product) => (
+                                    <option key={product.id} value={product.id}>
+                                        {product.name}
+                                    </option>
                                 ))}
-                            </ul>
-                        )}
+                            </select>
+                        </div>
+                        <div className="col-md-4 col-12 position-relative">
+                            <label>Lot Code</label>
+                            <input
+                                type="text"
+                                className="form-control"
+                                value={lotCode}
+                                onChange={handleLotCodeInputChange}
+                                placeholder="Enter or select a lot code"
+                                required
+                            />
+                            {suggestedLotCodes.length > 0 && (
+                                <ul
+                                    className="list-group mt-2 position-absolute w-100"
+                                    style={{
+                                        maxHeight: '150px',
+                                        overflowY: 'auto',
+                                        zIndex: 1000,
+                                    }}
+                                >
+                                    {suggestedLotCodes.map((code, index) => (
+                                        <li
+                                            key={index}
+                                            className="list-group-item"
+                                            onClick={() => handleSelectLotCode(code)}
+                                            style={{ cursor: 'pointer' }}
+                                        >
+                                            {code}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
                     </div>
-                </div>
-            
-                <div className="row mt-3">
-                    <div className="col-md-4 col-12">
-                        <label>Quantity</label>
-                        <input
-                            type="number"
-                            className="form-control"
-                            value={quantity}
-                            onChange={(e) => setQuantity(e.target.value)}
-                            required
-                        />
+
+                    <div className="row mt-3">
+                        <div className="col-md-4 col-12">
+                            <label>Quantity</label>
+                            <input
+                                type="number"
+                                className="form-control"
+                                value={quantity}
+                                onChange={(e) => setQuantity(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="col-md-8 col-12">
+                            <label>Customer</label>
+                            <input
+                                type="text"
+                                className="form-control"
+                                value={customer}
+                                onChange={(e) => setCustomer(e.target.value)}
+                                required
+                            />
+                        </div>
                     </div>
-                    <div className="col-md-8 col-12">
-                        <label>Customer</label>
-                        <input
-                            type="text"
-                            className="form-control"
-                            value={customer}
-                            onChange={(e) => setCustomer(e.target.value)}
-                            required
-                        />
-                    </div>
-                </div>
-            
-                <button type="submit" className="btn btn-primary mt-3 w-100">
-                    {isEditing ? 'Update Record' : 'Add Record'}
-                </button>
-            </form>
+
+                    <button type="submit" className="btn btn-primary mt-3 w-100">
+                        {isEditing ? 'Update Record' : 'Add Record'}
+                    </button>
+                </form>
             )}
 
             {/* Ingredient Lot Code Search */}
@@ -499,7 +500,8 @@ function TraceabilityPage() {
                                     <td>{client.productName}</td>
                                     <td>{client.batchLotCode}</td>
                                     <td>{client.quantity}</td>
-                                    <td>{new Date(client.date).toLocaleDateString()}</td> {/* Format Date */}
+
+                                    <td>{moment.utc(client.date).format('MM/DD/YYYY')}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -529,7 +531,8 @@ function TraceabilityPage() {
                         <tbody>
                             {(filteredLogs.length > 0 ? filteredLogs : logs).map((log) => (
                                 <tr key={log.id}>
-                                    <td>{new Date(log.date).toLocaleDateString()}</td>
+
+                                    <td>{moment.utc(log.date).format('MM/DD/YYYY')}</td>
                                     <td>{log.Product?.name || 'N/A'}</td>
                                     <td>{log.lotCode}</td>
                                     <td>{log.quantity}</td>

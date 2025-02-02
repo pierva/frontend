@@ -2,10 +2,11 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-const getLogs = async () => {
+const getLogs = async (page = 1, limit = 50, searchTerm = '', startDate = '', endDate = '') => {
   const token = localStorage.getItem('token');
   const response = await axios.get(`${API_URL}/api/logs`, {
     headers: { Authorization: `Bearer ${token}` },
+    params: { page, limit, searchTerm, startDate, endDate }
   });
   return response.data;
 };

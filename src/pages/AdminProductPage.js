@@ -10,15 +10,21 @@ function AdminProductPage() {
   const [messageType, setMessageType] = useState('');
   const [products, setProducts] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [ingredients, setIngredients] = useState([]);
+
+  // For editing/creating products
   const [editProductId, setEditProductId] = useState(null);
   const [editProductName, setEditProductName] = useState('');
   const [editCompanyName, setEditCompanyName] = useState('');
+  const [selectedIngredients, setSelectedIngredients] = useState([]); // array of ingredient IDs
 
-  // For Ingredients Management
+  // For Ingredients Management (creation/editing)
   const [ingredientName, setIngredientName] = useState('');
   const [manufacturer, setManufacturer] = useState('');
-  const [ingredients, setIngredients] = useState([]);
   const [editIngredient, setEditIngredient] = useState(null);
+
+  // NEW: State to control display of the edit modal
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Load products, companies, and ingredients when component mounts
   useEffect(() => {
@@ -66,30 +72,45 @@ function AdminProductPage() {
     }
   };
 
+  // NEW: When submitting a new product, send the recipe (selectedIngredients)
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     try {
-      await productService.createProduct(productName, editCompanyName);
+      await productService.createProduct(productName, editCompanyName, selectedIngredients);
       showAlert('Product created successfully!', 'success');
       setProductName('');
       setEditCompanyName('');
+      setSelectedIngredients([]); // reset recipe selection
       loadProducts();
     } catch (error) {
       showAlert('Error creating product.', 'danger');
     }
   };
 
+  // Modified startEdit: Opens the edit modal and loads product info and recipe
   const startEdit = (product) => {
     setEditProductId(product.id);
     setEditProductName(product.name);
-    setEditCompanyName(product.company);
+    // Assuming product.company (or product.Company.id) holds the company info:
+    setEditCompanyName(product.Company ? product.Company.id : '');
+    // Load the product's current recipe from the backend
+    productService.getProductRecipe(product.id)
+      .then(recipe => {
+        // recipe is expected to be an array of ingredient IDs
+        setSelectedIngredients(recipe);
+      })
+      .catch(err => console.error('Error loading product recipe', err));
+    setShowEditModal(true);
   };
 
+  // Modified saveEdit: Updates product info and recipe, then closes the modal
   const saveEdit = async () => {
     try {
-      await productService.updateProduct(editProductId, editProductName, editCompanyName);
+      await productService.updateProduct(editProductId, editProductName, editCompanyName, selectedIngredients);
       showAlert('Product updated successfully!', 'success');
       setEditProductId(null);
+      setSelectedIngredients([]);
+      setShowEditModal(false);
       loadProducts();
     } catch (error) {
       showAlert('Error updating product.', 'danger');
@@ -120,8 +141,8 @@ function AdminProductPage() {
     }
   };
 
-  const showAlert = (message, type) => {
-    setMessage(message);
+  const showAlert = (msg, type) => {
+    setMessage(msg);
     setMessageType(type);
     setTimeout(() => {
       setMessage('');
@@ -160,7 +181,7 @@ function AdminProductPage() {
         </button>
       </form>
 
-      {/* Product Form */}
+      {/* Product Form (for creating new products) */}
       <h2>Create New Product</h2>
       <form onSubmit={handleProductSubmit}>
         <div className="form-group">
@@ -189,52 +210,74 @@ function AdminProductPage() {
             ))}
           </select>
         </div>
+        {/* Recipe selection */}
+        <div className="form-group mt-3">
+          <label>Recipe (Select Ingredients)</label>
+          <select
+            multiple
+            className="form-select"
+            value={selectedIngredients}
+            onChange={(e) => {
+              const values = Array.from(e.target.selectedOptions, option => option.value);
+              setSelectedIngredients(values);
+            }}
+          >
+            {ingredients.map((ingredient) => (
+              <option key={ingredient.id} value={ingredient.id}>
+                {ingredient.name} ({ingredient.manufacturer})
+              </option>
+            ))}
+          </select>
+          <small className="form-text text-muted">
+            Hold down the Ctrl (Windows) or Command (Mac) button to select multiple ingredients.
+          </small>
+        </div>
         <button type="submit" className="btn btn-primary mt-3">
           Create Product
         </button>
       </form>
 
-    {/* Ingredient Form */}
-    <h2 className='mt-5'>Create New Ingredient</h2>
-    <form onSubmit={handleIngredientSubmit} className="mb-1">
-      <div className="form-group row">
-        <div className="col-md-6">
-          <label>Ingredient Name</label>
-          <input
-            type="text"
-            className="form-control"
-            value={ingredientName}
-            onChange={(e) => setIngredientName(e.target.value)}
-            required
-          />
+      {/* Ingredient Form */}
+      <h2 className="mt-5">Create New Ingredient</h2>
+      <form onSubmit={handleIngredientSubmit} className="mb-1">
+        <div className="form-group row">
+          <div className="col-md-6">
+            <label>Ingredient Name</label>
+            <input
+              type="text"
+              className="form-control"
+              value={ingredientName}
+              onChange={(e) => setIngredientName(e.target.value)}
+              required
+            />
+          </div>
+          <div className="col-md-6">
+            <label>Manufacturer</label>
+            <input
+              type="text"
+              className="form-control"
+              value={manufacturer}
+              onChange={(e) => setManufacturer(e.target.value)}
+              required
+            />
+          </div>
         </div>
-        <div className="col-md-6">
-          <label>Manufacturer</label>
-          <input
-            type="text"
-            className="form-control"
-            value={manufacturer}
-            onChange={(e) => setManufacturer(e.target.value)}
-            required
-          />
+        <div className="d-flex align-items-center mt-3">
+          <button type="submit" className="btn btn-primary me-2">
+            Create Ingredient
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            data-bs-toggle="modal"
+            data-bs-target="#ingredientsModal"
+          >
+            Show Ingredients
+          </button>
         </div>
-      </div>
-      <div className="d-flex align-items-center mt-3">
-        <button type="submit" className="btn btn-primary me-2">
-          Create Ingredient
-        </button>
-        <button
-          type="button" // Prevent form submission
-          className="btn btn-secondary"
-          data-bs-toggle="modal"
-          data-bs-target="#ingredientsModal"
-        >
-          Show Ingredients
-        </button>
-      </div>
-    </form>
+      </form>
 
-
+      {/* Ingredients Modal */}
       <div className="modal fade" id="ingredientsModal" tabIndex="-1">
         <div className="modal-dialog">
           <div className="modal-content">
@@ -313,50 +356,101 @@ function AdminProductPage() {
           {products.map((product) => (
             <tr key={product.id}>
               <td>{product.id}</td>
+              <td>{product.name}</td>
+              <td>{product.Company ? product.Company.name : product.companyId}</td>
               <td>
-                {editProductId === product.id ? (
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={editProductName}
-                    onChange={(e) => setEditProductName(e.target.value)}
-                  />
-                ) : (
-                  product.name
-                )}
-              </td>
-              <td>
-                {editProductId === product.id ? (
-                  <select
-                    className="form-select"
-                    value={editCompanyName}
-                    onChange={(e) => setEditCompanyName(e.target.value)}
-                  >
-                    {companies.map((company) => (
-                      <option key={company.id} value={company.id}>
-                        {company.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  product.companyId
-                )}
-              </td>
-              <td>
-                {editProductId === product.id ? (
-                  <button className="btn btn-success" onClick={saveEdit}>
-                    Save
-                  </button>
-                ) : (
-                  <button className="btn btn-primary" onClick={() => startEdit(product)}>
-                    Edit
-                  </button>
-                )}
+                <button className="btn btn-primary" onClick={() => startEdit(product)}>
+                  Edit
+                </button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {/* Product Edit Modal */}
+      {showEditModal && (
+        <div
+          className="modal fade show"
+          style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}
+          tabIndex="-1"
+          role="dialog"
+        >
+          <div className="modal-dialog" role="document">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Edit Product</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setShowEditModal(false)}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <form>
+                  <div className="form-group">
+                    <label>Product Name</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editProductName}
+                      onChange={(e) => setEditProductName(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group mt-3">
+                    <label>Company</label>
+                    <select
+                      className="form-select"
+                      value={editCompanyName}
+                      onChange={(e) => setEditCompanyName(e.target.value)}
+                    >
+                      <option value="">Select Company</option>
+                      {companies.map((company) => (
+                        <option key={company.id} value={company.id}>
+                          {company.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group mt-3">
+                    <label>Recipe (Select Ingredients)</label>
+                    <select
+                      multiple
+                      className="form-select"
+                      value={selectedIngredients}
+                      onChange={(e) => {
+                        const values = Array.from(e.target.selectedOptions, option => option.value);
+                        setSelectedIngredients(values);
+                      }}
+                    >
+                      {ingredients.map((ingredient) => (
+                        <option key={ingredient.id} value={ingredient.id}>
+                          {ingredient.name} ({ingredient.manufacturer})
+                        </option>
+                      ))}
+                    </select>
+                    <small className="form-text text-muted">
+                      Hold down the Ctrl (Windows) or Command (Mac) button to select multiple ingredients.
+                    </small>
+                  </div>
+                </form>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowEditModal(false)}
+                >
+                  Cancel
+                </button>
+                <button type="button" className="btn btn-primary" onClick={saveEdit}>
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

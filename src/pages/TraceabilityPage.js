@@ -9,7 +9,7 @@ function TraceabilityPage() {
   // Main data states
   const [products, setProducts] = useState([]);
   const [logs, setLogs] = useState([]);
-  
+
   // Pagination state for traceability logs
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -18,9 +18,7 @@ function TraceabilityPage() {
   // Form and search states for traceability log creation/editing
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedProduct, setSelectedProduct] = useState('');
-  const [lotCode, setLotCode] = useState('');
-  const [suggestedLotCodes, setSuggestedLotCodes] = useState([]);
-  const [quantity, setQuantity] = useState('');
+  const [suggestedLotCodes, setSuggestedLotCodes] = useState({});
   const [customer, setCustomer] = useState('');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('success');
@@ -35,6 +33,113 @@ function TraceabilityPage() {
   const [ingredientProducts, setIngredientProducts] = useState([]);
   const [ingredientBreakdown, setIngredientBreakdown] = useState([]);
   const [isIngredientSearchActive, setIsIngredientSearchActive] = useState(false);
+
+  // New state for handling multiple product entries
+  const [productEntries, setProductEntries] = useState([{ productId: '', lotCode: '', quantity: '' }]);
+
+  // Handler to update a specific product entry field
+  const handleProductEntryChange = (index, field, value) => {
+    const updatedEntries = [...productEntries];
+    updatedEntries[index][field] = value;
+    setProductEntries(updatedEntries);
+  };
+
+  // Updated lot code input handler for a specific row
+  const handleLotCodeInputChange = async (index, value) => {
+    handleProductEntryChange(index, 'lotCode', value);
+    if (value.length > 2) {
+      try {
+        const token = localStorage.getItem('token');
+        const params = { query: value };
+        // Optionally include productId if selected for this row
+        if (productEntries[index].productId) {
+          params.productId = productEntries[index].productId;
+        }
+        const response = await axios.get(`${API_URL}/api/traceability-logs/search-lot-codes`, {
+          params,
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setSuggestedLotCodes(prev => ({ ...prev, [index]: response.data }));
+      } catch (error) {
+        console.error('Error fetching lot code suggestions:', error);
+      }
+    } else {
+      setSuggestedLotCodes(prev => ({ ...prev, [index]: [] }));
+    }
+  };
+  
+
+  const fetchLogs = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API_URL}/api/traceability-logs`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { page: currentPage, limit: 20 },
+      });
+      setLogs(response.data.logs);
+      setTotalPages(response.data.totalPages);
+      setTotalLogs(response.data.totalLogs);
+    } catch (error) {
+      console.error('Error fetching logs:', error);
+    }
+  };
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedDate || !customer) {
+      setMessage('Date and customer are required.');
+      setMessageType('danger');
+      return;
+    }
+    for (const entry of productEntries) {
+      if (!entry.productId || !entry.lotCode || !entry.quantity) {
+        setMessage('Please fill out all fields for each product.');
+        setMessageType('danger');
+        return;
+      }
+    }
+    try {
+      const token = localStorage.getItem('token');
+      const newLog = {
+        date: selectedDate,
+        customer,
+        productEntries, // sending the array of product entries
+      };
+      if (isEditing) {
+        const editLog = { ...newLog, ...productEntries[0] };
+        await axios.put(`${API_URL}/api/traceability-logs/${editLogId}`, editLog, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setMessage('Traceability record updated successfully');
+      } else {
+        await axios.post(`${API_URL}/api/traceability-logs`, newLog, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setMessage('Traceability record added successfully');
+      }
+      setMessageType('success');
+      autoDismissMessage();
+      setIsEditing(false);
+      setEditLogId(null);
+      resetFormFields();
+      // Re-fetch logs immediately after submission
+      await fetchLogs();
+    } catch (error) {
+      console.error('Error adding/updating traceability record:', error);
+      setMessage('Error adding/updating traceability record');
+      setMessageType('danger');
+      autoDismissMessage();
+    }
+  };
+
+  const addProductEntry = () => {
+    setProductEntries([...productEntries, { productId: '', lotCode: '', quantity: '' }]);
+  };
+
+  const removeProductEntry = (index) => {
+    setProductEntries(productEntries.filter((_, i) => i !== index));
+  };
+
 
   const printRef = useRef();
 
@@ -81,33 +186,11 @@ function TraceabilityPage() {
     fetchLogs();
   }, [currentPage]);
 
-  // Handle lot code suggestions (for form input)
-  const handleLotCodeInputChange = async (e) => {
-    const input = e.target.value;
-    setLotCode(input);
-    if (input.length > 2) {
-      try {
-        const token = localStorage.getItem('token');
-        const params = { query: input };
-        if (selectedProduct) {
-          params.productId = selectedProduct;
-        }
-        const response = await axios.get(`${API_URL}/api/traceability-logs/search-lot-codes`, {
-          params,
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setSuggestedLotCodes(response.data);
-      } catch (error) {
-        console.error('Error fetching lot code suggestions:', error);
-      }
-    } else {
-      setSuggestedLotCodes([]);
-    }
-  };
-
-  const handleSelectLotCode = (code) => {
-    setLotCode(code);
-    setSuggestedLotCodes([]);
+  const handleSelectLotCode = (index, code) => {
+    // Update the lotCode field for the specific product entry at index
+    handleProductEntryChange(index, 'lotCode', code);
+    // Clear the suggestions for this row so the dropdown closes
+    setSuggestedLotCodes(prev => ({ ...prev, [index]: [] }));
   };
 
   // Handle in-page filtering of the main traceability logs table by lot code
@@ -121,45 +204,6 @@ function TraceabilityPage() {
       setFilteredLogs(filtered);
     } else {
       setFilteredLogs([]);
-    }
-  };
-
-  // Form submission for adding or editing a traceability log
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const token = localStorage.getItem('token');
-      const newLog = {
-        date: selectedDate,
-        productId: selectedProduct,
-        lotCode,
-        quantity,
-        customer,
-      };
-      if (isEditing) {
-        await axios.put(`${API_URL}/api/traceability-logs/${editLogId}`, newLog, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setMessage('Traceability record updated successfully');
-        setMessageType('success');
-      } else {
-        await axios.post(`${API_URL}/api/traceability-logs`, newLog, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setMessage('Traceability record added successfully');
-        setMessageType('success');
-      }
-      autoDismissMessage();
-      setIsEditing(false);
-      setEditLogId(null);
-      resetFormFields();
-      // Refresh logs: reset to first page
-      setCurrentPage(1);
-    } catch (error) {
-      console.error('Error adding/updating traceability record:', error);
-      setMessage('Error adding/updating traceability record');
-      setMessageType('danger');
-      autoDismissMessage();
     }
   };
 
@@ -229,20 +273,25 @@ function TraceabilityPage() {
   const resetFormFields = () => {
     setSelectedDate('');
     setSelectedProduct('');
-    setLotCode('');
-    setQuantity('');
     setCustomer('');
+    setProductEntries([{ productId: '', lotCode: '', quantity: '' }])
   };
 
   const handleEdit = (log) => {
     setSelectedDate(new Date(log.date).toISOString().split('T')[0]);
-    setSelectedProduct(log.productId);
-    setLotCode(log.lotCode);
-    setQuantity(log.quantity);
     setCustomer(log.customer);
+    setProductEntries([{ productId: log.productId, lotCode: log.lotCode, quantity: log.quantity }]);
     setEditLogId(log.id);
     setIsEditing(true);
   };
+  
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditLogId(null);
+    resetFormFields();
+  };
+  
 
   const handlePrint = () => {
     // Open a new window for printing
@@ -304,10 +353,10 @@ function TraceabilityPage() {
           Print View
         </button>
       )}
-
+      <hr/>
       {/* Search by Lot Code for traceability logs */}
       <div className="mb-3">
-        <label>Search by Lot Code</label>
+        <h4>Search by Lot Code</h4>
         <input
           type="text"
           className="form-control"
@@ -316,96 +365,8 @@ function TraceabilityPage() {
           value={searchLotCode}
         />
       </div>
-
-      {/* Form to add or edit a traceability record */}
-      {(userRole !== 'client' || userRole === 'client') && (
-        <form onSubmit={handleSubmit} className="mb-4">
-          <div className="row">
-            <div className="col-md-4 col-12">
-              <label>Date</label>
-              <input
-                type="date"
-                className="form-control"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                required
-              />
-            </div>
-            <div className="col-md-4 col-12">
-              <label>Product</label>
-              <select
-                className="form-control"
-                value={selectedProduct}
-                onChange={(e) => setSelectedProduct(e.target.value)}
-                required
-              >
-                <option value="">Select a product</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="col-md-4 col-12 position-relative">
-              <label>Lot Code</label>
-              <input
-                type="text"
-                className="form-control"
-                value={lotCode}
-                onChange={handleLotCodeInputChange}
-                placeholder="Enter or select a lot code"
-                required
-              />
-              {suggestedLotCodes.length > 0 && (
-                <ul
-                  className="list-group mt-2 position-absolute w-100"
-                  style={{ maxHeight: '150px', overflowY: 'auto', zIndex: 1000 }}
-                >
-                  {suggestedLotCodes.map((code, index) => (
-                    <li
-                      key={index}
-                      className="list-group-item"
-                      onClick={() => handleSelectLotCode(code)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {code}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-          <div className="row mt-3">
-            <div className="col-md-4 col-12">
-              <label>Quantity</label>
-              <input
-                type="number"
-                className="form-control"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                required
-              />
-            </div>
-            <div className="col-md-8 col-12">
-              <label>Customer</label>
-              <input
-                type="text"
-                className="form-control"
-                value={customer}
-                onChange={(e) => setCustomer(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-          <button type="submit" className="btn btn-primary mt-3 w-100">
-            {isEditing ? 'Update Record' : 'Add Record'}
-          </button>
-        </form>
-      )}
-
-      {/* Ingredient Lot Code Search */}
-      <div className="mb-4">
+       {/* Ingredient Lot Code Search */}
+       <div className="mb-4">
         <h4>Search Products by Ingredient Lot Code</h4>
         <div className="input-group mb-3">
           <input
@@ -423,6 +384,148 @@ function TraceabilityPage() {
           </button>
         </div>
       </div>
+      <hr className='mt-5'/>
+      <br/>
+      {/* Form to add or edit a traceability record */}
+      {(userRole !== 'client' || userRole === 'client') && (
+        <form onSubmit={handleSubmit} className="mb-4">
+          {/* Common fields */}
+          <h3>Add a new traceability record</h3>
+          <div className="row">
+            <div className="col-md-6 col-12">
+              <label>Date</label>
+              <input
+                type="date"
+                className="form-control"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                required
+              />
+            </div>
+            <div className="col-md-6 col-12">
+              <label>Customer</label>
+              <input
+                type="text"
+                className="form-control"
+                value={customer}
+                onChange={(e) => setCustomer(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          {/* Dynamic product entries */}
+          <h4 className="mt-3">Products</h4>
+          {productEntries.map((entry, index) => (
+            <div key={index} className="row mb-3 align-items-end">
+              <div className="col-md-4 col-12">
+                <label>Product</label>
+                <select
+                  className="form-control"
+                  value={entry.productId}
+                  onChange={(e) => handleProductEntryChange(index, 'productId', e.target.value)}
+                  required
+                >
+                  <option value="">Select a product</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-md-4 col-12 position-relative">
+                <label>Lot Code</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={entry.lotCode}
+                  onChange={(e) => handleLotCodeInputChange(index, e.target.value)}
+                  required
+                />
+                {(suggestedLotCodes[index] || []).length > 0 && (
+                  <ul
+                    className="list-group mt-2 position-absolute w-100"
+                    style={{ maxHeight: '150px', overflowY: 'auto', zIndex: 1000 }}
+                  >
+                    {(suggestedLotCodes[index] || []).map((code, idx) => (
+                      <li
+                        key={idx}
+                        className="list-group-item"
+                        style={{ cursor: 'pointer' }}
+                        onMouseDown={() => handleSelectLotCode(index, code)}
+                      >
+                        {code}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+
+              </div>
+              <div className="col-md-2 col-12">
+                <label>Quantity</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={entry.quantity}
+                  onChange={(e) => handleProductEntryChange(index, 'quantity', e.target.value)}
+                  required
+                />
+              </div>
+              <div className="col-md-2 col-12">
+                <button
+                  type="button"
+                  className="btn btn-danger w-100"
+                  onClick={() => removeProductEntry(index)}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+           {!isEditing && (
+              <div className="d-flex justify-content-center mb-3">
+                <button type="button" className="btn btn-secondary" onClick={addProductEntry}>
+                  + Add Another Product
+                </button>
+              </div>
+            )}
+          {/* <button type="submit" className="btn btn-primary w-50"
+            style={{ backgroundColor: isEditing ? 'orange' : undefined, borderColor: isEditing ? 'orange' : undefined }}
+          >
+            {isEditing ? 'Update Record' : 'Add Record'}
+          </button> */}
+         {isEditing ? (
+  <div className="row">
+    <div className="col-6">
+      <button
+        type="submit"
+        className="btn w-100"
+        style={{ backgroundColor: 'orange', borderColor: 'orange' }}
+      >
+        Update Record
+      </button>
+    </div>
+    <div className="col-6">
+      <button
+        type="button"
+        className="btn btn-secondary w-100"
+        onClick={handleCancelEdit}
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+) : (
+  <button type="submit" className="btn btn-primary w-100">
+    Add Record
+  </button>
+)}
+
+        </form>
+      )}
+
 
       {/* Display Ingredient Search Results */}
       {isIngredientSearchActive && ingredientBreakdown.length > 0 && (

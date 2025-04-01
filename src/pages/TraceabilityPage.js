@@ -15,6 +15,10 @@ function TraceabilityPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalLogs, setTotalLogs] = useState(0);
 
+   // New state: load all customers once and filter them for suggestions
+   const [allCustomers, setAllCustomers] = useState([]);
+   const [customerSuggestions, setCustomerSuggestions] = useState([]);
+
   // Form and search states for traceability log creation/editing
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedProduct, setSelectedProduct] = useState('');
@@ -164,6 +168,23 @@ function TraceabilityPage() {
     fetchProducts();
   }, []);
 
+   // Fetch all customers once on mount (for suggestions)
+   useEffect(() => {
+    const fetchAllCustomers = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get(`${API_URL}/api/customers`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        // Assume the response returns an array (or an object with a key 'customers')
+        setAllCustomers(response.data.customers || response.data);
+      } catch (error) {
+        console.error('Error fetching customers:', error);
+      }
+    };
+    fetchAllCustomers();
+  }, []);
+
   // Fetch paginated traceability logs when currentPage changes
   useEffect(() => {
     const fetchLogs = async () => {
@@ -185,6 +206,25 @@ function TraceabilityPage() {
     };
     fetchLogs();
   }, [currentPage]);
+
+  // Customer input change: filter the locally stored allCustomers array
+  const handleCustomerInputChange = (e) => {
+    const value = e.target.value;
+    setCustomer(value);
+    if (value.length >= 2) {
+      const suggestions = allCustomers.filter((cust) =>
+        cust.name.toLowerCase().includes(value.toLowerCase())
+      );
+      setCustomerSuggestions(suggestions);
+    } else {
+      setCustomerSuggestions([]);
+    }
+  };
+
+  const handleSelectCustomer = (selectedCust) => {
+    setCustomer(selectedCust.name);
+    setCustomerSuggestions([]);
+  };
 
   const handleSelectLotCode = (index, code) => {
     // Update the lotCode field for the specific product entry at index
@@ -402,16 +442,40 @@ function TraceabilityPage() {
                 required
               />
             </div>
-            <div className="col-md-6 col-12">
-              <label>Customer</label>
-              <input
-                type="text"
-                className="form-control"
-                value={customer}
-                onChange={(e) => setCustomer(e.target.value)}
-                required
-              />
-            </div>
+            <div className="col-md-6 col-12" style={{ position: 'relative' }}>
+            <label>Customer</label>
+            <input
+              type="text"
+              className="form-control"
+              value={customer}
+              onChange={handleCustomerInputChange}
+              required
+            />
+            {customerSuggestions.length > 0 && (
+              <ul
+                className="list-group position-absolute"
+                style={{
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  maxHeight: '150px',
+                  overflowY: 'auto',
+                  zIndex: 1000,
+                }}
+              >
+                {customerSuggestions.map((cust) => (
+                  <li
+                    key={cust.id}
+                    className="list-group-item"
+                    style={{ cursor: 'pointer' }}
+                    onMouseDown={() => handleSelectCustomer(cust)}
+                  >
+                    {cust.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           </div>
 
           {/* Dynamic product entries */}

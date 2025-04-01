@@ -8,6 +8,15 @@ function Login() {
   const [errorMessage, setErrorMessage] = useState(''); // State to track error message
   const navigate = useNavigate();
 
+    // Redirect if already logged in
+    useEffect(() => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        // Optionally, you can decode and check token expiration here
+        navigate('/traceability');
+      }
+    }, [navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -30,7 +39,7 @@ function Login() {
   }, [errorMessage]);
 
   return (
-    <div className="container">
+    <div className="container mt-5">
       <h2>Login to PIZZACINI quickLOG</h2>
       <form onSubmit={handleSubmit}>
         {errorMessage && ( // Show the error message conditionally

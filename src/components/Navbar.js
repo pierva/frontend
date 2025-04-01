@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
-import logo from '../media/logo_text.png';
+import logo from '../media/Pizzacini/logo_text.png';
 
 function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -44,6 +44,9 @@ function Navbar() {
     window.location.href = '/';
   };
 
+  // Use environment variable for the logo. If not defined, fallback to local logo.
+  const logoUrl = process.env.REACT_APP_LOGO_URL
+
   return (
     <>
       <nav
@@ -60,7 +63,7 @@ function Navbar() {
         <div className="container-fluid">
           <Link className="navbar-brand d-flex align-items-center" to="/">
             <img
-              src={logo}
+              src={logoUrl}
               alt="Company Logo"
               style={{ height: '40px', marginRight: '10px' }}
             />

@@ -1,5 +1,6 @@
 import React from 'react';
-import logo from '../media/logo_text_blue.png'; // Ensure this is the correct path to your logo
+import logo from '../media/Pizzacini/logo_text_blue.png'; 
+const logoUrl = process.env.REACT_APP_LOGO_PRINT_URL || logo;
 
 function PrintTraceabilityView({ logs, ingredientBreakdown, ingredientProducts, isIngredientSearchActive, ingredientLotCode }) {
     const printDate = new Date().toLocaleDateString();
@@ -25,7 +26,7 @@ function PrintTraceabilityView({ logs, ingredientBreakdown, ingredientProducts, 
                 {/* Center logo */}
                 <div style={{ flex: '0 0 auto', textAlign: 'center' }}>
                     <img 
-                        src={logo} 
+                        src={logoUrl} 
                         alt="Company Logo" 
                         style={{ maxWidth: '250px', maxHeight: '70px', objectFit: 'contain' }}
                     />

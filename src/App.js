@@ -12,6 +12,7 @@ import InventoryPage from './pages/InventoryPage';
 import NotFoundPage from './pages/NotFoundPage'; // Import the 404 component
 import AdminOrdersPage from './pages/AdminOrdersPage';
 import FactoryOrdersPage from './pages/FactoryOrdersPage';
+import AdminCustomerPage from './pages/AdminCustomerPage';
 
 
 
@@ -51,6 +52,12 @@ function App() {
         <Route path="/admin/users" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <AdminUserManagement />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/admin/customers" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminCustomerPage />
           </ProtectedRoute>
         } />
 

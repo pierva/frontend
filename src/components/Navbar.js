@@ -6,11 +6,10 @@ import logo from '../media/logo_text.png';
 function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState('');
-  const [isExpanded, setIsExpanded] = useState(false); // Track navbar state
-  const navbarRef = useRef(); // Reference for the navbar element
+  const [isExpanded, setIsExpanded] = useState(false);
+  const navbarRef = useRef();
   const location = useLocation();
 
-  // Check login status and role
   const checkLoginStatus = () => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -23,26 +22,17 @@ function Navbar() {
     }
   };
 
-  // Handle clicks outside the navbar
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (
-        isExpanded &&
-        navbarRef.current &&
-        !navbarRef.current.contains(event.target)
-      ) {
-        setIsExpanded(false); // Collapse navbar
+      if (isExpanded && navbarRef.current && !navbarRef.current.contains(event.target)) {
+        setIsExpanded(false);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isExpanded]);
 
-  // Check login status on mount and route change
   useEffect(() => {
     checkLoginStatus();
   }, [location]);
@@ -51,12 +41,11 @@ function Navbar() {
     localStorage.removeItem('token');
     setIsLoggedIn(false);
     setUserRole('');
-    window.location.href = '/'; // Redirect to login
+    window.location.href = '/';
   };
 
   return (
     <>
-      {/* Navbar */}
       <nav
         className="navbar navbar-expand-lg navbar-dark"
         style={{
@@ -66,7 +55,7 @@ function Navbar() {
           width: '100%',
           zIndex: 1000,
         }}
-        ref={navbarRef} // Attach ref to navbar
+        ref={navbarRef}
       >
         <div className="container-fluid">
           <Link className="navbar-brand d-flex align-items-center" to="/">
@@ -85,18 +74,14 @@ function Navbar() {
             aria-controls="navbarNav"
             aria-expanded={isExpanded ? 'true' : 'false'}
             aria-label="Toggle navigation"
-            onClick={() => setIsExpanded(!isExpanded)} // Toggle navbar state
+            onClick={() => setIsExpanded(!isExpanded)}
           >
             <span className="navbar-toggler-icon"></span>
           </button>
-          <div
-            className={`collapse navbar-collapse ${isExpanded ? 'show' : ''}`} // Dynamically add "show" class
-            id="navbarNav"
-          >
+          <div className={`collapse navbar-collapse ${isExpanded ? 'show' : ''}`} id="navbarNav">
             <ul className="navbar-nav ms-auto">
               {isLoggedIn && (
                 <>
-                  {/* Links visible to all logged-in users */}
                   <li className="nav-item">
                     <Link className="nav-link" to="/logs">
                       Production Logs
@@ -112,8 +97,6 @@ function Navbar() {
                       Inventory
                     </Link>
                   </li>
-
-                  {/* Links for factory_team and admin */}
                   {(userRole === 'admin' || userRole === 'factory_team') && (
                     <>
                       <li className="nav-item">
@@ -128,8 +111,6 @@ function Navbar() {
                       </li>
                     </>
                   )}
-
-                  {/* Links for admin only */}
                   {userRole === 'admin' && (
                     <>
                       <li className="nav-item">
@@ -147,10 +128,14 @@ function Navbar() {
                           User Management
                         </Link>
                       </li>
+                      {/* New Customers link for admin */}
+                      <li className="nav-item">
+                        <Link className="nav-link" to="/admin/customers">
+                          Customers
+                        </Link>
+                      </li>
                     </>
                   )}
-
-                  {/* Logout Button */}
                   <li className="nav-item">
                     <button className="btn btn-outline-danger" onClick={handleLogout}>
                       Logout
@@ -158,7 +143,6 @@ function Navbar() {
                   </li>
                 </>
               )}
-              {/* Login Link for unauthenticated users */}
               {!isLoggedIn && (
                 <li className="nav-item">
                   <Link className="nav-link" to="/">
@@ -170,8 +154,6 @@ function Navbar() {
           </div>
         </div>
       </nav>
-
-      {/* Spacer div to prevent content from being hidden behind fixed navbar */}
       <div style={{ paddingTop: '70px' }}></div>
     </>
   );

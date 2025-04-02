@@ -1,3 +1,13 @@
+# Push updates 
+For the backend push the updates using the command
+### `git push heroku-pizzacini-quicklog main`
+### `git push heroku-mimi-quicklog main`
+
+This way the same code is uploaded to both heroku deployments.
+
+The frontend is deployed in netlify. The deployment is connected to github, so when an update is pushed to github the production deployment gets automatically update.
+
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).

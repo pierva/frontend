@@ -31,6 +31,7 @@ function AdminProductPage() {
     loadProducts();
     loadCompanies();
     loadIngredients();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadProducts = async () => {

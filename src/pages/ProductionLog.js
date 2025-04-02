@@ -10,7 +10,8 @@ function ProductionLog() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [totalLogs, setTotalLogs] = useState(0);
+
+  const [totalLogs, setTotalLogs] = useState(0); // eslint-disable-line no-unused-vars
 
   // Effective filter state: these are used in the API call.
   const [searchTerm, setSearchTerm] = useState('');

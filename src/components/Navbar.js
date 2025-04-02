@@ -45,7 +45,7 @@ function Navbar() {
   };
 
   // Use environment variable for the logo. If not defined, fallback to local logo.
-  const logoUrl = process.env.REACT_APP_LOGO_URL
+  const logoUrl = process.env.REACT_APP_LOGO_URL || logo
 
   return (
     <>

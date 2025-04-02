@@ -13,7 +13,8 @@ function TraceabilityPage() {
   // Pagination state for traceability logs
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [totalLogs, setTotalLogs] = useState(0);
+
+  const [totalLogs, setTotalLogs] = useState(0); // eslint-disable-line no-unused-vars
 
    // New state: load all customers once and filter them for suggestions
    const [allCustomers, setAllCustomers] = useState([]);
@@ -21,7 +22,8 @@ function TraceabilityPage() {
 
   // Form and search states for traceability log creation/editing
   const [selectedDate, setSelectedDate] = useState('');
-  const [selectedProduct, setSelectedProduct] = useState('');
+
+  const [selectedProduct, setSelectedProduct] = useState(''); // eslint-disable-line no-unused-vars
   const [suggestedLotCodes, setSuggestedLotCodes] = useState({});
   const [customer, setCustomer] = useState('');
   const [message, setMessage] = useState('');

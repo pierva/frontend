@@ -114,10 +114,6 @@ function AdminCustomerPage() {
     }
   };
 
-  const autoDismissMessage = () => {
-    setTimeout(() => setMessage(''), 3000);
-  };
-
   return (
     <div className="container mt-5">
       <h2>Manage Customers</h2>

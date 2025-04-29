@@ -557,11 +557,6 @@ function TraceabilityPage() {
                 </button>
               </div>
             )}
-          {/* <button type="submit" className="btn btn-primary w-50"
-            style={{ backgroundColor: isEditing ? 'orange' : undefined, borderColor: isEditing ? 'orange' : undefined }}
-          >
-            {isEditing ? 'Update Record' : 'Add Record'}
-          </button> */}
          {isEditing ? (
   <div className="row">
     <div className="col-6">

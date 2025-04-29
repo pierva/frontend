@@ -21,6 +21,15 @@ const ordersService = {
     return response.data;
   },
 
+  getAllCustomers: async () => {
+    const token = localStorage.getItem('token');
+    const resp = await axios.get(`${API_URL}/api/customers`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    return resp.data.customers;
+  },
+
   // Create a new order with multiple entries
   // `order` should be: { client, date_of_delivery, entries: [{ productId, quantity }, …] }
   createOrder: async ({ client, date_of_delivery, entries }) => {

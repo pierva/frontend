@@ -36,6 +36,16 @@ const ordersService = {
     return response.data;
   },
 
+  //Get last order to prefill the form
+  getLastOrder: async (client) => {
+    const token = localStorage.getItem('token');
+    const resp = await axios.get(`${API_URL}/api/orders/last`, {
+      params: { client },
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return resp.data;
+  },
+
   // Fulfill an order by adding a lot code
   fulfillOrder: async (orderId, lotCode) => {
     const token = localStorage.getItem('token');

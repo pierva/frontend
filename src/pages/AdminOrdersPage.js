@@ -12,96 +12,121 @@ function AdminOrdersPage() {
   const [messageType, setMessageType] = useState('success');
 
   useEffect(() => {
-    const fetchProducts = async () => {
+    (async () => {
       try {
         const prods = await ordersService.getProducts();
         setProducts(prods);
-      } catch (error) {
-        setMessage('Error fetching products');
-        setMessageType('danger');
-        autoDismissMessage();
+      } catch {
+        showMsg('Error fetching products', 'danger');
       }
-    };
-    fetchProducts();
+    })();
   }, []);
 
-  const handleEntryChange = (index, field, value) => {
-    const newEntries = [...order.entries];
-    newEntries[index][field] = value;
-    setOrder({ ...order, entries: newEntries });
+  // Offer to prefill only product entries & quantities
+  const handleClientBlur = async () => {
+    const c = order.client.trim();
+    if (!c) return;
+
+    try {
+      // prev is now an array of { productId, quantity }
+      const prev = await ordersService.getLastOrder(c);
+      if (Array.isArray(prev) && prev.length) {
+        const ok = window.confirm('Prefill products/quantities from their last order?');
+        if (ok) {
+          setOrder(current => ({
+            ...current,
+            entries: prev.map(e => ({
+              productId: String(e.productId),
+              quantity: String(e.quantity),
+            })),
+          }));
+        }
+      }
+    } catch {
+      // no previous order or error → ignore
+    }
   };
 
-  const addEntry = () => {
-    setOrder({
-      ...order,
-      entries: [...order.entries, { productId: '', quantity: '' }],
+  const handleEntryChange = (idx, field, value) => {
+    setOrder(current => {
+      const entries = [...current.entries];
+      entries[idx] = { ...entries[idx], [field]: value };
+      return { ...current, entries };
     });
   };
 
-  const removeEntry = (index) => {
-    const newEntries = order.entries.filter((_, i) => i !== index);
-    setOrder({ ...order, entries: newEntries });
+  const addEntry = () => {
+    setOrder(current => ({
+      ...current,
+      entries: [...current.entries, { productId: '', quantity: '' }],
+    }));
   };
 
-  const handleSubmit = async (e) => {
+  const removeEntry = idx => {
+    setOrder(current => ({
+      ...current,
+      entries: current.entries.filter((_, i) => i !== idx),
+    }));
+  };
+
+  const handleSubmit = async e => {
     e.preventDefault();
-    // Basic validation
     if (!order.client || !order.date_of_delivery) {
-      setMessage('Client and delivery date are required.');
-      setMessageType('danger');
-      autoDismissMessage();
-      return;
+      return showMsg('Client and delivery date are required.', 'danger');
     }
     for (let { productId, quantity } of order.entries) {
       if (!productId || !quantity) {
-        setMessage('Please fill out all product and quantity fields.');
-        setMessageType('danger');
-        autoDismissMessage();
-        return;
+        return showMsg('Please fill out every product and quantity.', 'danger');
       }
     }
 
     try {
-      await ordersService.createOrder(order);
-      setMessage('Order created successfully');
-      setMessageType('success');
-      // reset
+      await ordersService.createOrder({
+        client: order.client,
+        date_of_delivery: order.date_of_delivery,
+        entries: order.entries.map(e => ({
+          productId: Number(e.productId),
+          quantity: Number(e.quantity),
+        })),
+      });
+      showMsg('Order created successfully', 'success');
       setOrder({
         client: '',
         date_of_delivery: '',
         entries: [{ productId: '', quantity: '' }],
       });
-      autoDismissMessage();
-    } catch (error) {
-      setMessage('Error creating order');
-      setMessageType('danger');
-      autoDismissMessage();
+    } catch {
+      showMsg('Error creating order', 'danger');
     }
   };
 
-  const autoDismissMessage = () => {
+  const showMsg = (text, type) => {
+    setMessage(text);
+    setMessageType(type);
     setTimeout(() => setMessage(''), 3000);
   };
 
   return (
     <div className="container mt-5">
       {message && (
-        <div className={`alert alert-${messageType} alert-dismissible fade show`} role="alert">
+        <div className={`alert alert-${messageType} alert-dismissible`} role="alert">
           {message}
-          <button type="button" className="btn-close" onClick={() => setMessage('')}></button>
+          <button className="btn-close" onClick={() => setMessage('')} />
         </div>
       )}
+
       <h2>Submit a New Order</h2>
       <form onSubmit={handleSubmit}>
-        {/* Order-level fields */}
-        <div className="row g-3">
+        {/* Client & Date */}
+        <div className="row g-3 mb-3">
           <div className="col-md-6">
             <label className="form-label">Client</label>
             <input
               type="text"
               className="form-control"
               value={order.client}
-              onChange={(e) => setOrder({ ...order, client: e.target.value })}
+              onChange={e => setOrder({ ...order, client: e.target.value })}
+              onBlur={handleClientBlur}
               required
             />
           </div>
@@ -111,7 +136,7 @@ function AdminOrdersPage() {
               type="date"
               className="form-control"
               value={order.date_of_delivery}
-              onChange={(e) => setOrder({ ...order, date_of_delivery: e.target.value })}
+              onChange={e => setOrder({ ...order, date_of_delivery: e.target.value })}
               required
             />
           </div>
@@ -119,20 +144,20 @@ function AdminOrdersPage() {
 
         <hr />
 
-        {/* Dynamic product entries */}
-        {order.entries.map((entry, idx) => (
-          <div className="row g-3 align-items-end" key={idx}>
+        {/* Product Entries */}
+        {order.entries.map((ent, idx) => (
+          <div className="row g-3 align-items-end mb-2" key={idx}>
             <div className="col-md-5">
               <label className="form-label">Product</label>
               <select
                 className="form-select"
-                value={entry.productId}
-                onChange={(e) => handleEntryChange(idx, 'productId', e.target.value)}
+                value={ent.productId}
+                onChange={e => handleEntryChange(idx, 'productId', e.target.value)}
                 required
               >
                 <option value="">Select a product</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
+                {products.map(p => (
+                  <option key={p.id} value={String(p.id)}>
                     {p.name}
                   </option>
                 ))}
@@ -143,8 +168,8 @@ function AdminOrdersPage() {
               <input
                 type="number"
                 className="form-control"
-                value={entry.quantity}
-                onChange={(e) => handleEntryChange(idx, 'quantity', e.target.value)}
+                value={ent.quantity}
+                onChange={e => handleEntryChange(idx, 'quantity', e.target.value)}
                 required
               />
             </div>
@@ -171,7 +196,7 @@ function AdminOrdersPage() {
           </div>
         ))}
 
-        <button type="submit" className="btn btn-primary mt-4">
+        <button type="submit" className="btn btn-primary mt-3">
           Submit Order
         </button>
       </form>

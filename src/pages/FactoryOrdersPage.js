@@ -1,286 +1,305 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import { FaEdit, FaTrash, FaCheck } from 'react-icons/fa';
 import ordersService from '../services/ordersService';
-import { FaEdit, FaTrash, FaCheck } from 'react-icons/fa'; // Import icons
+import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
 function FactoryOrdersPage() {
-    const [orders, setOrders] = useState([]);
-    const [lotCodes, setLotCodes] = useState({});
-    const [suggestedLotCodes, setSuggestedLotCodes] = useState({}); // Store suggestions for each order
-    const [message, setMessage] = useState('');
-    const [error, setError] = useState('');
-    const [userRole, setUserRole] = useState('');
-    const [editingOrder, setEditingOrder] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [lotCodes, setLotCodes] = useState({});
+  const [suggestedLotCodes, setSuggestedLotCodes] = useState({});
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [userRole, setUserRole] = useState('');
+  const [editingOrder, setEditingOrder] = useState(null);
 
-    useEffect(() => {
-        const fetchOrders = async () => {
-            try {
-                const orders = await ordersService.getOrders();
-                setOrders(orders);
+  useEffect(() => {
+    (async () => {
+      try {
+        const fetched = await ordersService.getOrders();
+        setOrders(fetched);
 
-                const token = localStorage.getItem('token');
-                const decodedToken = JSON.parse(atob(token.split('.')[1]));
-                setUserRole(decodedToken.role);
-            } catch (err) {
-                console.error('Error fetching orders:', err);
-                setError('Failed to fetch orders.');
-                autoDismissMessage('error');
-            }
-        };
+        const token = localStorage.getItem('token');
+        const decoded = JSON.parse(atob(token.split('.')[1]));
+        setUserRole(decoded.role);
+      } catch (err) {
+        console.error(err);
+        setError('Failed to fetch orders.');
+        autoDismiss('error');
+      }
+    })();
+  }, []);
 
-        fetchOrders();
-    }, []);
+  const autoDismiss = (type) => {
+    setTimeout(() => {
+      if (type === 'error') setError('');
+      else setMessage('');
+    }, 3000);
+  };
 
-    const handleLotCodeChange = async (orderId, value, productId) => {
-        setLotCodes({ ...lotCodes, [orderId]: value.trim().toUpperCase() }); // Update input value
+  const handleLotCodeChange = async (orderId, value, productId) => {
+    setLotCodes((lc) => ({ ...lc, [orderId]: value.trim().toUpperCase() }));
 
-        // Fetch suggestions if input length > 2
-        if (value.trim().length > 2) {
-            try {
-                const token = localStorage.getItem('token');
-                const response = await axios.get(`${API_URL}/api/traceability-logs/search-lot-codes`, {
-                    params: { query: value.trim(), productId },
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                setSuggestedLotCodes({ ...suggestedLotCodes, [orderId]: response.data });
-            } catch (err) {
-                console.error('Error fetching lot codes:', err);
-                setError('Failed to fetch lot codes.');
-                autoDismissMessage('error');
-            }
-        } else {
-            setSuggestedLotCodes({ ...suggestedLotCodes, [orderId]: [] }); // Clear suggestions if input is short
-        }
-    };
+    if (value.trim().length > 2) {
+      try {
+        const token = localStorage.getItem('token');
+        const resp = await axios.get(
+          `${API_URL}/api/traceability-logs/search-lot-codes`,
+          {
+            params: { query: value.trim(), productId },
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        setSuggestedLotCodes((s) => ({ ...s, [orderId]: resp.data }));
+      } catch {
+        setError('Failed to fetch lot codes.');
+        autoDismiss('error');
+      }
+    } else {
+      setSuggestedLotCodes((s) => ({ ...s, [orderId]: [] }));
+    }
+  };
 
-    const handleSelectLotCode = (orderId, lotCode) => {
-        setLotCodes({ ...lotCodes, [orderId]: lotCode });
-        setSuggestedLotCodes({ ...suggestedLotCodes, [orderId]: [] }); // Clear suggestions
-    };
+  const handleSelectLotCode = (orderId, lotCode) => {
+    setLotCodes((lc) => ({ ...lc, [orderId]: lotCode }));
+    setSuggestedLotCodes((s) => ({ ...s, [orderId]: [] }));
+  };
 
-    const handleFulfillOrder = async (orderId) => {
-        try {
-            const lotCode = lotCodes[orderId]?.trim().toUpperCase();
-            if (!lotCode) {
-                setError('Lot code is required.');
-                return;
-            }
+  const handleFulfillOrder = async (orderId) => {
+    try {
+      const code = lotCodes[orderId]?.trim().toUpperCase();
+      if (!code) {
+        setError('Lot code is required.');
+        autoDismiss('error');
+        return;
+      }
+      await ordersService.fulfillOrder(orderId, code);
+      setMessage('Order fulfilled successfully.');
+      setOrders((o) => o.filter((ord) => ord.id !== orderId));
+      autoDismiss('success');
+    } catch {
+      setError('Failed to fulfill order.');
+      autoDismiss('error');
+    }
+  };
 
-            await ordersService.fulfillOrder(orderId, lotCode);
+  const handleDeleteOrder = async (orderId) => {
+    try {
+      await ordersService.deleteOrder(orderId);
+      setMessage('Order deleted successfully.');
+      setOrders((o) => o.filter((ord) => ord.id !== orderId));
+      autoDismiss('success');
+    } catch {
+      setError('Failed to delete order.');
+      autoDismiss('error');
+    }
+  };
 
-            setMessage('Order fulfilled successfully.');
-            setOrders(orders.filter((order) => order.id !== orderId)); // Remove the fulfilled order
-        } catch (err) {
-            console.error('Error fulfilling order:', err);
-            setError('Failed to fulfill order.');
-            autoDismissMessage('error');
-        }
-    };
+  const handleEditOrder = (order) => setEditingOrder(order);
 
-    const handleDeleteOrder = async (orderId) => {
-        try {
-            await ordersService.deleteOrder(orderId);
-            setMessage('Order deleted successfully.');
-            autoDismissMessage('success');
-            setOrders(orders.filter((order) => order.id !== orderId)); // Remove deleted order
-        } catch (err) {
-            console.error('Error deleting order:', err);
-            setError('Failed to delete order.');
-            autoDismissMessage('error');
-        }
-    };
+  const handleUpdateOrder = async (e) => {
+    e.preventDefault();
+    try {
+      await ordersService.updateOrder(editingOrder.id, editingOrder);
+      setMessage('Order updated successfully.');
+      autoDismiss('success');
+      setEditingOrder(null);
+      const updated = await ordersService.getOrders();
+      setOrders(updated);
+    } catch {
+      setError('Failed to update order.');
+      autoDismiss('error');
+    }
+  };
 
-    const handleEditOrder = (order) => {
-        setEditingOrder(order);
-    };
+  return (
+    <div className="container mt-5">
+      <h2>Factory Orders Management</h2>
 
-    const handleUpdateOrder = async (e) => {
-        e.preventDefault();
-        try {            
-            await ordersService.updateOrder(editingOrder.id, editingOrder);
-            setMessage('Order updated successfully.');
-            autoDismissMessage('success');
-            setEditingOrder(null);
+      {message && (
+        <div className="alert alert-success alert-dismissible fade show" role="alert">
+          {message}
+          <button className="btn-close" onClick={() => setMessage('')} />
+        </div>
+      )}
+      {error && (
+        <div className="alert alert-danger alert-dismissible fade show" role="alert">
+          {error}
+          <button className="btn-close" onClick={() => setError('')} />
+        </div>
+      )}
 
-            const updatedOrders = await ordersService.getOrders();
-            setOrders(updatedOrders);
-        } catch (err) {
-            console.error('Error updating order:', err);
-            setError('Failed to update order.');
-            autoDismissMessage('error');
-        }
-    };
+      {editingOrder && (
+        <form onSubmit={handleUpdateOrder} className="mb-4">
+          <h4>Update Order</h4>
+          {/* product (readonly) */}
+          <div className="row g-3">
+            <div className="col-md-6">
+              <label>Product</label>
+              <input
+                className="form-control"
+                value={editingOrder.Product?.name || 'N/A'}
+                disabled
+              />
+            </div>
+            <div className="col-md-6">
+              <label>Quantity</label>
+              <input
+                type="number"
+                className="form-control"
+                value={editingOrder.quantity}
+                onChange={(e) =>
+                  setEditingOrder((o) => ({ ...o, quantity: e.target.value }))
+                }
+                required
+              />
+            </div>
+          </div>
 
-    const autoDismissMessage = (type) => {
-        setTimeout(() => {
-            if (type === 'success') setMessage('');
-            if (type === 'error') setError('');
-        }, 3000);
-    };
+          <div className="row g-3 mt-3">
+            <div className="col-md-6">
+              <label>Date of Delivery</label>
+              <input
+                type="date"
+                className="form-control"
+                value={editingOrder.date_of_delivery}
+                onChange={(e) =>
+                  setEditingOrder((o) => ({
+                    ...o,
+                    date_of_delivery: e.target.value,
+                  }))
+                }
+                required
+              />
+            </div>
+            <div className="col-md-6">
+              <label>Client</label>
+              <input
+                className="form-control"
+                value={editingOrder.client}
+                onChange={(e) =>
+                  setEditingOrder((o) => ({ ...o, client: e.target.value }))
+                }
+                required
+              />
+            </div>
+          </div>
 
-    return (
-        <div className="container mt-5">
-            <h2>Factory Orders Management</h2>
+          <div className="mt-3">
+            <button className="btn btn-primary me-2">Update Order</button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setEditingOrder(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
 
-            {message && (
-                <div className="alert alert-success alert-dismissible fade show" role="alert">
-                    {message}
-                    <button type="button" className="btn-close" onClick={() => setMessage('')}></button>
-                </div>
+      <table className="table table-bordered mt-3">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Quantity</th>
+            <th>Date of Delivery</th>
+            <th>Client</th>
+            {/* show for both factory_team & admin */}
+            {(userRole === 'factory_team' || userRole === 'admin') && (
+              <th>Lot Code</th>
             )}
-            {error && (
-                <div className="alert alert-danger alert-dismissible fade show" role="alert">
-                    {error}
-                    <button type="button" className="btn-close" onClick={() => setError('')}></button>
-                </div>
-            )}
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((ord) => (
+            <tr key={ord.id}>
+              <td>{ord.Product?.name || 'N/A'}</td>
+              <td>{ord.quantity}</td>
+              <td>{ord.date_of_delivery}</td>
+              <td>{ord.client}</td>
 
-{editingOrder && (
-                <form onSubmit={handleUpdateOrder} className="mb-4">
-                    <h4>Update Order</h4>
-                    <div className="form-group mt-3">
-                        <label>Product</label>
-                        <input
-                            type="text"
-                            className="form-control"
-                            value={editingOrder.Product?.name || 'N/A'}
-                            disabled
-                        />
-                    </div>
-                    <div className="form-group mt-3">
-                        <label>Quantity</label>
-                        <input
-                            type="number"
-                            className="form-control"
-                            value={editingOrder.quantity}
-                            onChange={(e) =>
-                                setEditingOrder({ ...editingOrder, quantity: e.target.value })
-                            }
-                            required
-                        />
-                    </div>
-                    <div className="form-group mt-3">
-                        <label>Date of Delivery</label>
-                        <input
-                            type="date"
-                            className="form-control"
-                            value={editingOrder.date_of_delivery}
-                            onChange={(e) =>
-                                setEditingOrder({ ...editingOrder, date_of_delivery: e.target.value })
-                            }
-                            required
-                        />
-                    </div>
-                    <div className="form-group mt-3">
-                        <label>Client</label>
-                        <input
-                            type="text"
-                            className="form-control"
-                            value={editingOrder.client}
-                            onChange={(e) =>
-                                setEditingOrder({ ...editingOrder, client: e.target.value })
-                            }
-                            required
-                        />
-                    </div>
-                    <button type="submit" className="btn btn-primary mt-3">
-                        Update Order
+              {/* Lot Code input for both roles */}
+              {(userRole === 'factory_team' || userRole === 'admin') && (
+                <td className="position-relative">
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={lotCodes[ord.id] || ''}
+                    onChange={(e) =>
+                      handleLotCodeChange(ord.id, e.target.value, ord.productId)
+                    }
+                    placeholder="Enter Lot Code"
+                  />
+                  {suggestedLotCodes[ord.id]?.length > 0 && (
+                    <ul
+                      className="list-group position-absolute w-100 mt-1"
+                      style={{
+                        maxHeight: '150px',
+                        overflowY: 'auto',
+                        zIndex: 1000,
+                      }}
+                    >
+                      {suggestedLotCodes[ord.id].map((code, i) => (
+                        <li
+                          key={i}
+                          className="list-group-item list-group-item-action"
+                          onClick={() => handleSelectLotCode(ord.id, code)}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          {code}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </td>
+              )}
+
+              <td>
+                {userRole === 'admin' ? (
+                  <>
+                    {/* Admin gets Fulfill + Edit + Delete */}
+                    <button
+                      className="btn btn-success me-2"
+                      onClick={() => handleFulfillOrder(ord.id)}
+                      title="Fulfill"
+                    >
+                      <FaCheck />
                     </button>
                     <button
-                        type="button"
-                        className="btn btn-secondary mt-3 ms-3"
-                        onClick={() => setEditingOrder(null)}
+                      className="btn btn-warning me-2"
+                      onClick={() => handleEditOrder(ord)}
+                      title="Edit"
                     >
-                        Cancel
+                      <FaEdit />
                     </button>
-                </form>
-            )}
-
-            <table className="table table-bordered mt-3">
-                <thead>
-                    <tr>
-                        <th>Product</th>
-                        <th>Quantity</th>
-                        <th>Date of Delivery</th>
-                        <th>Client</th>
-                        {userRole === 'factory_team' && <th>Lot Code</th>}
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {orders.map((order) => (
-                        <tr key={order.id}>
-                            <td>{order.Product?.name || 'N/A'}</td>
-                            <td>{order.quantity}</td>
-                            <td>{order.date_of_delivery}</td>
-                            <td>{order.client}</td>
-                            {userRole === 'factory_team' && (
-                                <td className="position-relative">
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        value={lotCodes[order.id] || ''}
-                                        onChange={(e) =>
-                                            handleLotCodeChange(order.id, e.target.value, order.productId)
-                                        }
-                                        placeholder="Enter Lot Code"
-                                    />
-                                    {suggestedLotCodes[order.id]?.length > 0 && (
-                                        <ul
-                                            className="list-group position-absolute w-100 mt-1"
-                                            style={{
-                                                maxHeight: '150px',
-                                                overflowY: 'auto',
-                                                zIndex: 1000,
-                                            }}
-                                        >
-                                            {suggestedLotCodes[order.id].map((lotCode, index) => (
-                                                <li
-                                                    key={index}
-                                                    className="list-group-item list-group-item-action"
-                                                    onClick={() => handleSelectLotCode(order.id, lotCode)}
-                                                    style={{ cursor: 'pointer' }}
-                                                >
-                                                    {lotCode}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                </td>
-                            )}
-                            <td>
-                                {userRole === 'admin' ? (
-                                    <>
-                                        <button
-                                            className="btn btn-warning me-2"
-                                            onClick={() => handleEditOrder(order)}
-                                        >
-                                            <FaEdit />
-                                        </button>
-                                        <button
-                                            className="btn btn-danger"
-                                            onClick={() => handleDeleteOrder(order.id)}
-                                        >
-                                            <FaTrash />
-                                        </button>
-                                    </>
-                                ) : (
-                                    <button
-                                        className="btn btn-success"
-                                        onClick={() => handleFulfillOrder(order.id)}
-                                    >
-                                        <FaCheck />
-                                    </button>
-                                )}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    );
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => handleDeleteOrder(ord.id)}
+                      title="Delete"
+                    >
+                      <FaTrash />
+                    </button>
+                  </>
+                ) : (
+                  // Factory team only gets Fulfill
+                  <button
+                    className="btn btn-success"
+                    onClick={() => handleFulfillOrder(ord.id)}
+                    title="Fulfill"
+                  >
+                    <FaCheck />
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export default FactoryOrdersPage;

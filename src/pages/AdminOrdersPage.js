@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Modal, Button } from 'react-bootstrap';
 import ordersService from '../services/ordersService';
 
 function AdminOrdersPage() {
@@ -13,6 +14,10 @@ function AdminOrdersPage() {
   });
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('success');
+
+  // For prefill modal
+  const [showPrefillModal, setShowPrefillModal] = useState(false);
+  const [prevEntries, setPrevEntries] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -53,22 +58,28 @@ function AdminOrdersPage() {
     try {
       const prev = await ordersService.getLastOrder(c);
       if (Array.isArray(prev) && prev.length) {
-        const ok = window.confirm(
-          'Prefill products/quantities from their last order?'
+        // store converted entries, then show modal
+        setPrevEntries(
+          prev.map((e) => ({
+            productId: String(e.productId),
+            quantity: String(e.quantity),
+          }))
         );
-        if (ok) {
-          setOrder((cur) => ({
-            ...cur,
-            entries: prev.map((e) => ({
-              productId: String(e.productId),
-              quantity: String(e.quantity),
-            })),
-          }));
-        }
+        setShowPrefillModal(true);
       }
     } catch {
-      // ignore
+      // no previous → ignore
     }
+  };
+
+  const confirmPrefill = () => {
+    setOrder((cur) => ({ ...cur, entries: prevEntries }));
+    setShowPrefillModal(false);
+  };
+
+  const cancelPrefill = () => {
+    setPrevEntries([]);
+    setShowPrefillModal(false);
   };
 
   const handleEntryChange = (idx, field, value) => {
@@ -241,6 +252,25 @@ function AdminOrdersPage() {
           Submit Order
         </button>
       </form>
+
+      {/* PREFILL MODAL */}
+      <Modal show={showPrefillModal} onHide={cancelPrefill} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Prefill Previous Order?</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          We found a previous order for <strong>{order.client}</strong>. Would you
+          like to prefill products and quantities from that order?
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={cancelPrefill}>
+            No
+          </Button>
+          <Button variant="primary" onClick={confirmPrefill}>
+            Yes, Prefill
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

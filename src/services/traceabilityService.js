@@ -1,36 +1,68 @@
 import axios from 'axios';
+
 const API_URL = process.env.REACT_APP_API_URL;
 
-export default {
-  getLogs: (page, limit, token) =>
-    axios.get(`${API_URL}/api/traceability-logs`, {
+const traceabilityService = {
+  // Fetch paginated traceability logs
+  async getLogs(page, limit, token) {
+    const resp = await axios.get(`${API_URL}/api/traceability-logs`, {
       params: { page, limit },
       headers: { Authorization: `Bearer ${token}` },
-    }),
-  searchLotCodes: (query, productId, token) =>
-    axios.get(`${API_URL}/api/traceability-logs/search-lot-codes`, {
-      params: { query, productId },
+    });
+    return resp;
+  },
+
+  // Search by ingredient lot code
+  async searchIngredient(ingredientLotCode, token) {
+    const resp = await axios.get(
+      `${API_URL}/api/traceability-logs/ingredient-lot-code`,
+      {
+        params: { ingredientLotCode },
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+    return resp;
+  },
+
+  // Fetch all products
+  async getProducts(token) {
+    const resp = await axios.get(`${API_URL}/api/products`, {
       headers: { Authorization: `Bearer ${token}` },
-    }),
-  searchIngredient: (code, token) =>
-    axios.get(`${API_URL}/api/traceability-logs/ingredient-lot-code`, {
-      params: { ingredientLotCode: code },
+    });
+    return resp;
+  },
+
+  // Fetch all customers
+  async getCustomers(token) {
+    const resp = await axios.get(`${API_URL}/api/customers`, {
       headers: { Authorization: `Bearer ${token}` },
-    }),
-  getCustomers: (token) =>
-    axios.get(`${API_URL}/api/customers`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
-  getProducts: (token) =>
-    axios.get(`${API_URL}/api/products`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
-  createLog: (payload, token) =>
-    axios.post(`${API_URL}/api/traceability-logs`, payload, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
-  updateLog: (id, payload, token) =>
-    axios.put(`${API_URL}/api/traceability-logs/${id}`, payload, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    });
+    return resp;
+  },
+
+  // Create a new traceability record
+  async createLog(payload, token) {
+    const resp = await axios.post(
+      `${API_URL}/api/traceability-logs`,
+      payload,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+    return resp;
+  },
+
+  // Update an existing traceability record
+  async updateLog(id, payload, token) {
+    const resp = await axios.put(
+      `${API_URL}/api/traceability-logs/${id}`,
+      payload,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+    return resp;
+  },
 };
+
+export default traceabilityService;

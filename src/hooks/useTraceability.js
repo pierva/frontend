@@ -1,37 +1,31 @@
-import { useState, useEffect } from 'react';
+// src/hooks/useTraceability.js
+import { useState, useEffect, useCallback } from 'react';
 import service from '../services/traceabilityService';
 
-export function useTraceability(limit = 20) {
+export function useTraceability(limit) {
   const [logs, setLogs] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [totalLogs, setTotalLogs] = useState(0);
-  const [loading, setLoading] = useState(false);
 
-  const token = localStorage.getItem('token');
+  // fetchPage no longer closes over `page`; it accepts it as a parameter
+  const fetchPage = useCallback(
+    async (pageToFetch) => {
+      const token = localStorage.getItem('token');
+      try {
+        const resp = await service.getLogs(pageToFetch, limit, token);
+        setLogs(resp.data.logs);
+        setTotalPages(resp.data.totalPages);
+      } catch (err) {
+        console.error('Error fetching traceability logs:', err);
+      }
+    },
+    [limit] // only depends on `limit`
+  );
 
-  const fetchPage = async (p = page) => {
-    setLoading(true);
-    try {
-      const { data } = await service.getLogs(p, limit, token);
-      setLogs(data.logs);
-      setTotalPages(data.totalPages);
-      setTotalLogs(data.totalLogs);
-      setPage(data.currentPage);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPage(1);
-  }, []);
-
+  // whenever `page` changes (or we get a new fetchPage fn), refetch
   useEffect(() => {
     fetchPage(page);
-  }, [page]);
+  }, [fetchPage, page]);
 
-  return { logs, page, totalPages, totalLogs, setPage, fetchPage, loading };
+  return { logs, page, totalPages, setPage, fetchPage };
 }

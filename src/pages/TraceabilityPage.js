@@ -1,340 +1,181 @@
-import React, { useEffect, useState, useRef } from 'react';
-import axios from 'axios';
-import PrintTraceabilityView from '../components/PrintTraceabilityView';
-import moment from 'moment';
+// src/pages/TraceabilityPage.js
+import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-const API_URL = process.env.REACT_APP_API_URL;
+import { Modal, Button } from 'react-bootstrap';
+import TraceabilitySearchPanel from '../components/TraceabilitySearchPanel';
+import TraceabilityForm from '../components/TraceabilityForm';
+import TraceabilityTable from '../components/TraceabilityTable';
+import Pagination from '../components/Pagination';
+import PrintTraceabilityView from '../components/PrintTraceabilityView';
+import { useTraceability } from '../hooks/useTraceability';
+import service from '../services/traceabilityService';
 
-function TraceabilityPage() {
-  // Main data states
-  const [products, setProducts] = useState([]);
-  const [logs, setLogs] = useState([]);
+export default function TraceabilityPage() {
+  const token = localStorage.getItem('token');
+  const { logs, page, totalPages, setPage, fetchPage } = useTraceability(20);
 
-  // Pagination state for traceability logs
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-
-  const [totalLogs, setTotalLogs] = useState(0); // eslint-disable-line no-unused-vars
-
-   // New state: load all customers once and filter them for suggestions
-   const [allCustomers, setAllCustomers] = useState([]);
-   const [customerSuggestions, setCustomerSuggestions] = useState([]);
-
-  // Form and search states for traceability log creation/editing
-  const [selectedDate, setSelectedDate] = useState('');
-
-  const [selectedProduct, setSelectedProduct] = useState(''); // eslint-disable-line no-unused-vars
-  const [suggestedLotCodes, setSuggestedLotCodes] = useState({});
-  const [customer, setCustomer] = useState('');
-  const [message, setMessage] = useState('');
-  const [messageType, setMessageType] = useState('success');
-  const [userRole, setUserRole] = useState('');
-  const [filteredLogs, setFilteredLogs] = useState([]);
+  // Search panel state
   const [searchLotCode, setSearchLotCode] = useState('');
+  const [productSearchValue, setProductSearchValue] = useState('');
+  const [filteredLogs, setFilteredLogs] = useState([]);
+
+  // Ingredient search state
+  const [ingredientLotCode, setIngredientLotCode] = useState('');
+  const [ingredientBreakdown, setIngredientBreakdown] = useState([]);
+  const [ingredientProducts, setIngredientProducts] = useState([]);
+  const [isIngredientSearchActive, setIsIngredientSearchActive] = useState(false);
+  const [errorModal, setErrorModal] = useState({ show: false, message: '' });
+
+  // Form state
+  const [products, setProducts] = useState([]);
+  const [allCustomers, setAllCustomers] = useState([]);
+  const [customerSuggestions, setCustomerSuggestions] = useState([]);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [customer, setCustomer] = useState('');
+  const [productEntries, setProductEntries] = useState([{ productId: '', lotCode: '', quantity: '' }]);
+  const [suggestedLotCodes, setSuggestedLotCodes] = useState({});
   const [isEditing, setIsEditing] = useState(false);
   const [editLogId, setEditLogId] = useState(null);
+  // User feedback messages
+  const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState('success');
 
-  // Ingredient lot code search states
-  const [ingredientLotCode, setIngredientLotCode] = useState('');
-  const [ingredientProducts, setIngredientProducts] = useState([]);
-  const [ingredientBreakdown, setIngredientBreakdown] = useState([]);
-  const [isIngredientSearchActive, setIsIngredientSearchActive] = useState(false);
-
-  // New state for handling multiple product entries
-  const [productEntries, setProductEntries] = useState([{ productId: '', lotCode: '', quantity: '' }]);
-
-  // Handler to update a specific product entry field
-  const handleProductEntryChange = (index, field, value) => {
-    const updatedEntries = [...productEntries];
-    updatedEntries[index][field] = value;
-    setProductEntries(updatedEntries);
-  };
-
-  // Updated lot code input handler for a specific row
-  const handleLotCodeInputChange = async (index, value) => {
-    handleProductEntryChange(index, 'lotCode', value);
-    if (value.length > 2) {
+  // Load products and customers once
+  useEffect(() => {
+    (async () => {
       try {
-        const token = localStorage.getItem('token');
-        const params = { query: value };
-        // Optionally include productId if selected for this row
-        if (productEntries[index].productId) {
-          params.productId = productEntries[index].productId;
-        }
-        const response = await axios.get(`${API_URL}/api/traceability-logs/search-lot-codes`, {
-          params,
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setSuggestedLotCodes(prev => ({ ...prev, [index]: response.data }));
-      } catch (error) {
-        console.error('Error fetching lot code suggestions:', error);
+        const [prodsRes, custsRes] = await Promise.all([
+          service.getProducts(token),
+          service.getCustomers(token)
+        ]);
+        setProducts(prodsRes.data);
+        setAllCustomers(custsRes.data.customers || custsRes.data);
+      } catch (e) {
+        console.error('Error loading products/customers', e);
       }
-    } else {
-      setSuggestedLotCodes(prev => ({ ...prev, [index]: [] }));
-    }
-  };
-  
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchLogs = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/api/traceability-logs`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { page: currentPage, limit: 20 },
-      });
-      setLogs(response.data.logs);
-      setTotalPages(response.data.totalPages);
-      setTotalLogs(response.data.totalLogs);
-    } catch (error) {
-      console.error('Error fetching logs:', error);
-    }
-  };
-  
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!selectedDate || !customer) {
-      setMessage('Date and customer are required.');
-      setMessageType('danger');
+  // Combine lot code and product name filtering
+  useEffect(() => {
+    if (!searchLotCode && !productSearchValue) {
+      setFilteredLogs([]);
       return;
     }
-    for (const entry of productEntries) {
-      if (!entry.productId || !entry.lotCode || !entry.quantity) {
-        setMessage('Please fill out all fields for each product.');
-        setMessageType('danger');
+    const fl = logs.filter(log => {
+      const lotMatch = !searchLotCode || log.lotCode.toLowerCase().includes(searchLotCode.toLowerCase());
+      const prodMatch = !productSearchValue || log.Product?.name.toLowerCase().includes(productSearchValue.toLowerCase());
+      return lotMatch && prodMatch;
+    });
+    setFilteredLogs(fl);
+  }, [searchLotCode, productSearchValue, logs]);
+
+  // Handlers for search inputs
+  const handleSearchByLotCode = e => setSearchLotCode(e.target.value);
+  const handleSearchByProductName = e => setProductSearchValue(e.target.value);
+
+  // Ingredient lot code search
+  const handleIngredientSearch = async () => {
+    if (!ingredientLotCode) {
+      setErrorModal({ show: true, message: 'Please enter an ingredient lot code.' });
+      return;
+    }
+    try {
+      const resp = await service.searchIngredient(ingredientLotCode, token);
+      const data = resp.data;
+      if (!data || data.length === 0) {
+        setErrorModal({ show: true, message: `No products found with ingredient '${ingredientLotCode}'.` });
         return;
       }
-    }
-    try {
-      const token = localStorage.getItem('token');
-      const newLog = {
-        date: selectedDate,
-        customer,
-        productEntries, // sending the array of product entries
-      };
-      if (isEditing) {
-        const editLog = { ...newLog, ...productEntries[0] };
-        await axios.put(`${API_URL}/api/traceability-logs/${editLogId}`, editLog, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setMessage('Traceability record updated successfully');
-      } else {
-        await axios.post(`${API_URL}/api/traceability-logs`, newLog, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setMessage('Traceability record added successfully');
-      }
-      setMessageType('success');
-      autoDismissMessage();
-      setIsEditing(false);
-      setEditLogId(null);
-      resetFormFields();
-      // Re-fetch logs immediately after submission
-      await fetchLogs();
-    } catch (error) {
-      console.error('Error adding/updating traceability record:', error);
-      setMessage('Error adding/updating traceability record');
-      setMessageType('danger');
-      autoDismissMessage();
-    }
-  };
-
-  const addProductEntry = () => {
-    setProductEntries([...productEntries, { productId: '', lotCode: '', quantity: '' }]);
-  };
-
-  const removeProductEntry = (index) => {
-    setProductEntries(productEntries.filter((_, i) => i !== index));
-  };
-
-
-  const printRef = useRef();
-
-  // Fetch products once on mount
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        // Decode token to set user role
-        const decodedToken = JSON.parse(atob(token.split('.')[1]));
-        setUserRole(decodedToken.role);
-        const productsResponse = await axios.get(`${API_URL}/api/products`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setProducts(productsResponse.data);
-      } catch (error) {
-        setMessage('Error fetching products');
-        setMessageType('danger');
-        console.error('Error fetching products:', error);
-      }
-    };
-    fetchProducts();
-  }, []);
-
-   // Fetch all customers once on mount (for suggestions)
-   useEffect(() => {
-    const fetchAllCustomers = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get(`${API_URL}/api/customers`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        // Assume the response returns an array (or an object with a key 'customers')
-        setAllCustomers(response.data.customers || response.data);
-      } catch (error) {
-        console.error('Error fetching customers:', error);
-      }
-    };
-    fetchAllCustomers();
-  }, []);
-
-  // Fetch paginated traceability logs when currentPage changes
-  useEffect(() => {
-    const fetchLogs = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get(`${API_URL}/api/traceability-logs`, {
-          headers: { Authorization: `Bearer ${token}` },
-          params: { page: currentPage, limit: 20 },
-        });
-        // The backend returns an object with logs, currentPage, totalPages, totalLogs
-        setLogs(response.data.logs);
-        setTotalPages(response.data.totalPages);
-        setTotalLogs(response.data.totalLogs);
-      } catch (error) {
-        setMessage('Error fetching logs');
-        setMessageType('danger');
-        console.error('Error fetching logs:', error);
-      }
-    };
-    fetchLogs();
-  }, [currentPage]);
-
-  // Customer input change: filter the locally stored allCustomers array
-  const handleCustomerInputChange = (e) => {
-    const value = e.target.value;
-    setCustomer(value);
-    if (value.length >= 2) {
-      const suggestions = allCustomers.filter((cust) =>
-        cust.name.toLowerCase().includes(value.toLowerCase())
-      );
-      setCustomerSuggestions(suggestions);
-    } else {
-      setCustomerSuggestions([]);
-    }
-  };
-
-  const handleSelectCustomer = (selectedCust) => {
-    setCustomer(selectedCust.name);
-    setCustomerSuggestions([]);
-  };
-
-  const handleSelectLotCode = (index, code) => {
-    // Update the lotCode field for the specific product entry at index
-    handleProductEntryChange(index, 'lotCode', code);
-    // Clear the suggestions for this row so the dropdown closes
-    setSuggestedLotCodes(prev => ({ ...prev, [index]: [] }));
-  };
-
-  // Handle in-page filtering of the main traceability logs table by lot code
-  const handleSearchByLotCode = (e) => {
-    const input = e.target.value;
-    setSearchLotCode(input);
-    if (input.length > 0) {
-      const filtered = logs.filter((log) =>
-        log.lotCode.toLowerCase().includes(input.toLowerCase())
-      );
-      setFilteredLogs(filtered);
-    } else {
-      setFilteredLogs([]);
-    }
-  };
-
-  // Ingredient lot code search: fetch products and allocations using an ingredient lot code
-  const handleSearchIngredientLotCode = async () => {
-    if (!ingredientLotCode) {
-      setMessage('Please enter an ingredient lot code');
-      setMessageType('danger');
-      autoDismissMessage();
-      return;
-    }
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/api/traceability-logs/ingredient-lot-code`, {
-        params: { ingredientLotCode },
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = response.data;
-      // Create a breakdown summary for each product
-      const breakdown = data.map((item) => ({
+      const breakdown = data.map(item => ({
         productName: item.productName,
         batchLotCode: item.batchLotCode,
         quantityProduced: item.quantityProduced,
         quantityAllocated: item.quantityAllocated,
-        quantityInInventory: item.quantityInInventory,
+        quantityInInventory: item.quantityInInventory
       }));
-      // Flatten client allocations for detailed view
-      const clients = data.flatMap((item) =>
-        item.clients.map((client) => ({
-          customer: client.customer,
+      const clients = data.flatMap(item =>
+        item.clients.map(c => ({
+          customer: c.customer,
           productName: item.productName,
           batchLotCode: item.batchLotCode,
-          quantity: client.quantity,
-          date: client.date,
+          quantity: c.quantity,
+          date: c.date
         }))
       );
       setIngredientBreakdown(breakdown);
       setIngredientProducts(clients);
       setIsIngredientSearchActive(true);
-    } catch (error) {
-      console.error('Error searching by ingredient lot code:', error);
-      if (error.response) {
-        if (error.response.status === 404) {
-          setMessage(error.response.data.message || 'No data found for the given ingredient lot code.');
-        } else {
-          setMessage('An error occurred: ' + (error.response.data.message || 'Please try again later.'));
-        }
-      } else {
-        setMessage('Unable to fetch data. Please check your internet connection.');
-      }
-      setMessageType('danger');
-      autoDismissMessage();
+    } catch (err) {
+      console.error('Error searching by ingredient lot code', err);
+      const msg = err.response?.data?.message || 'An unexpected error occurred while searching by ingredient lot code.';
+      setErrorModal({ show: true, message: msg });
     }
   };
-
   const clearIngredientSearch = () => {
     setIngredientLotCode('');
-    setIngredientProducts([]);
     setIngredientBreakdown([]);
+    setIngredientProducts([]);
     setIsIngredientSearchActive(false);
   };
 
-  const autoDismissMessage = () => {
-    setTimeout(() => setMessage(''), 3000);
+  // Form handlers
+  const handleDateChange = val => setSelectedDate(val);
+  const handleCustomerChange = e => {
+    const v = e.target.value;
+    setCustomer(v);
+    if (v.length >= 2) {
+      setCustomerSuggestions(allCustomers.filter(c => c.name.toLowerCase().includes(v.toLowerCase())));
+    } else {
+      setCustomerSuggestions([]);
+    }
   };
+  const handleSelectCustomer = c => { setCustomer(c.name); setCustomerSuggestions([]); };
+  const handleProductEntryChange = (i, f, v) => { const arr = [...productEntries]; arr[i][f] = v; setProductEntries(arr); };
+  const handleLotCodeSelect = (i, code) => { handleProductEntryChange(i, 'lotCode', code); setSuggestedLotCodes(prev => ({ ...prev, [i]: [] })); };
+  const addProductEntry = () => setProductEntries([...productEntries, { productId: '', lotCode: '', quantity: '' }]);
+  const removeProductEntry = i => setProductEntries(pe => pe.filter((_, idx) => idx !== i));
 
-  const resetFormFields = () => {
-    setSelectedDate('');
-    setSelectedProduct('');
-    setCustomer('');
-    setProductEntries([{ productId: '', lotCode: '', quantity: '' }])
+  // Submit form (create or update)
+  const handleSubmit = async e => {
+    e.preventDefault();
+    try {
+      if (isEditing) {
+        const { productId, lotCode, quantity } = productEntries[0];
+        await service.updateLog(editLogId,
+          { date: selectedDate, customer, productId, lotCode, quantity }, token);
+        setMessage('Traceability record updated successfully');
+      } else {
+        await service.createLog(
+          { date: selectedDate, customer, productEntries }, token);
+        setMessage('Traceability record added successfully');
+      }
+      setMessageType('success');
+      // auto-dismiss message after 3s
+      setTimeout(() => setMessage(''), 3000);
+
+      setIsEditing(false); setEditLogId(null);
+      setSelectedDate(''); setCustomer('');
+      setProductEntries([{ productId: '', lotCode: '', quantity: '' }]);
+      await fetchPage(1);
+    } catch (err) {
+      console.error('Error saving record', err);
+      setErrorModal({ show: true, message: 'Error saving traceability record. Please try again.' });
+    }
   };
-
-  const handleEdit = (log) => {
-    setSelectedDate(new Date(log.date).toISOString().split('T')[0]);
+  const handleEdit = log => {
+    setSelectedDate(log.date.split('T')[0]);
     setCustomer(log.customer);
     setProductEntries([{ productId: log.productId, lotCode: log.lotCode, quantity: log.quantity }]);
-    setEditLogId(log.id);
-    setIsEditing(true);
+    setIsEditing(true); setEditLogId(log.id);
   };
-  
-
   const handleCancelEdit = () => {
-    setIsEditing(false);
-    setEditLogId(null);
-    resetFormFields();
+    setIsEditing(false); setEditLogId(null);
+    setSelectedDate(''); setCustomer('');
+    setProductEntries([{ productId: '', lotCode: '', quantity: '' }]);
   };
-  
 
+  const printRef = useRef();
   const handlePrint = () => {
     // Open a new window for printing
     const printWindow = window.open('', '_blank');
@@ -362,11 +203,8 @@ function TraceabilityPage() {
     const container = printWindow.document.getElementById('print-content');
     const renderedContent = (
       <PrintTraceabilityView
-        logs={filteredLogs.length > 0 ? filteredLogs : logs}
-        ingredientBreakdown={ingredientBreakdown}
-        ingredientProducts={ingredientProducts}
-        isIngredientSearchActive={isIngredientSearchActive}
-        ingredientLotCode={ingredientLotCode}
+        logs={filteredLogs.length ? filteredLogs : logs}
+        ingredientResults={ingredientBreakdown}
       />
     );
     const root = createRoot(container);
@@ -377,7 +215,8 @@ function TraceabilityPage() {
   };
 
   return (
-    <div className="container mt-5">
+    <div className="container mt-5 mb-4">
+      {/* Feedback Messages */}
       {message && (
         <div className="fixed-top mt-5 d-flex justify-content-center">
           <div className={`alert alert-${messageType} alert-dismissible fade show w-50`} role="alert">
@@ -396,325 +235,99 @@ function TraceabilityPage() {
         </button>
       )}
       <hr/>
-      {/* Search by Lot Code for traceability logs */}
-      <div className="mb-3">
-        <h4>Search by Lot Code</h4>
-        <input
-          type="text"
-          className="form-control"
-          placeholder="Enter Lot Code to search"
-          onChange={handleSearchByLotCode}
-          value={searchLotCode}
-        />
-      </div>
-       {/* Ingredient Lot Code Search */}
-       <div className="mb-4">
-        <h4>Search Products by Ingredient Lot Code</h4>
-        <div className="input-group mb-3">
-          <input
-            type="text"
-            className="form-control"
-            placeholder="Enter Ingredient Lot Code"
-            value={ingredientLotCode}
-            onChange={(e) => setIngredientLotCode(e.target.value)}
-          />
-          <button
-            className={`btn ${isIngredientSearchActive ? 'btn-secondary' : 'btn-primary'}`}
-            onClick={isIngredientSearchActive ? clearIngredientSearch : handleSearchIngredientLotCode}
-          >
-            {isIngredientSearchActive ? 'Clear Search' : 'Search'}
-          </button>
-        </div>
-      </div>
-      <hr className='mt-5'/>
-      <br/>
-      {/* Form to add or edit a traceability record */}
-      {(userRole !== 'client' || userRole === 'client') && (
-        <form onSubmit={handleSubmit} className="mb-4">
-          {/* Common fields */}
-          <h3>Add a new traceability record</h3>
-          <div className="row">
-            <div className="col-md-6 col-12">
-              <label>Date</label>
-              <input
-                type="date"
-                className="form-control"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                required
-              />
-            </div>
-            <div className="col-md-6 col-12" style={{ position: 'relative' }}>
-            <label>Customer</label>
-            <input
-              type="text"
-              className="form-control"
-              value={customer}
-              onChange={handleCustomerInputChange}
-              required
-            />
-            {customerSuggestions.length > 0 && (
-              <ul
-                className="list-group position-absolute"
-                style={{
-                  top: '100%',
-                  left: 0,
-                  right: 0,
-                  maxHeight: '150px',
-                  overflowY: 'auto',
-                  zIndex: 1000,
-                }}
-              >
-                {customerSuggestions.map((cust) => (
-                  <li
-                    key={cust.id}
-                    className="list-group-item"
-                    style={{ cursor: 'pointer' }}
-                    onMouseDown={() => handleSelectCustomer(cust)}
-                  >
-                    {cust.name}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          </div>
+      <TraceabilitySearchPanel
+        lotSearchValue={searchLotCode}
+        onLotSearchChange={handleSearchByLotCode}
+        productSearchValue={productSearchValue}
+        onProductSearchChange={handleSearchByProductName}
+        ingredientCode={ingredientLotCode}
+        onIngredientCodeChange={setIngredientLotCode}
+        onIngredientSearch={handleIngredientSearch}
+        onIngredientClear={clearIngredientSearch}
+        isIngredientActive={isIngredientSearchActive}
+      />
 
-          {/* Dynamic product entries */}
-          <h4 className="mt-3">Products</h4>
-          {productEntries.map((entry, index) => (
-            <div key={index} className="row mb-3 align-items-end">
-              <div className="col-md-4 col-12">
-                <label>Product</label>
-                <select
-                  className="form-control"
-                  value={entry.productId}
-                  onChange={(e) => handleProductEntryChange(index, 'productId', e.target.value)}
-                  required
-                >
-                  <option value="">Select a product</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-md-4 col-12 position-relative">
-                <label>Lot Code</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={entry.lotCode}
-                  onChange={(e) => handleLotCodeInputChange(index, e.target.value)}
-                  required
-                />
-                {(suggestedLotCodes[index] || []).length > 0 && (
-                  <ul
-                    className="list-group mt-2 position-absolute w-100"
-                    style={{ maxHeight: '150px', overflowY: 'auto', zIndex: 1000 }}
-                  >
-                    {(suggestedLotCodes[index] || []).map((code, idx) => (
-                      <li
-                        key={idx}
-                        className="list-group-item"
-                        style={{ cursor: 'pointer' }}
-                        onMouseDown={() => handleSelectLotCode(index, code)}
-                      >
-                        {code}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+      <TraceabilityForm
+        userRole={JSON.parse(atob(token.split('.')[1])).role}
+        isEditing={isEditing}
+        selectedDate={selectedDate}
+        onDateChange={handleDateChange}
+        customer={customer}
+        onCustomerChange={handleCustomerChange}
+        customerSuggestions={customerSuggestions}
+        onSelectCustomer={handleSelectCustomer}
+        productEntries={productEntries}
+        onProductEntryChange={handleProductEntryChange}
+        suggestedLotCodes={suggestedLotCodes}
+        onLotCodeSelect={handleLotCodeSelect}
+        addProductEntry={addProductEntry}
+        removeProductEntry={removeProductEntry}
+        onSubmit={handleSubmit}
+        onCancelEdit={handleCancelEdit}
+        products={products}
+      />
 
-
-              </div>
-              <div className="col-md-2 col-12">
-                <label>Quantity</label>
-                <input
-                  type="number"
-                  className="form-control"
-                  value={entry.quantity}
-                  onChange={(e) => handleProductEntryChange(index, 'quantity', e.target.value)}
-                  required
-                />
-              </div>
-              <div className="col-md-2 col-12">
-                <button
-                  type="button"
-                  className="btn btn-danger w-100"
-                  onClick={() => removeProductEntry(index)}
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          ))}
-           {!isEditing && (
-              <div className="d-flex justify-content-center mb-3">
-                <button type="button" className="btn btn-secondary" onClick={addProductEntry}>
-                  + Add Another Product
-                </button>
-              </div>
-            )}
-         {isEditing ? (
-  <div className="row">
-    <div className="col-6">
-      <button
-        type="submit"
-        className="btn w-100"
-        style={{ backgroundColor: 'orange', borderColor: 'orange' }}
-      >
-        Update Record
-      </button>
-    </div>
-    <div className="col-6">
-      <button
-        type="button"
-        className="btn btn-secondary w-100"
-        onClick={handleCancelEdit}
-      >
-        Cancel
-      </button>
-    </div>
-  </div>
-) : (
-  <button type="submit" className="btn btn-primary w-100">
-    Add Record
-  </button>
-)}
-
-        </form>
-      )}
-
-
-      {/* Display Ingredient Search Results */}
+      {/* Ingredient Search Results */}
       {isIngredientSearchActive && ingredientBreakdown.length > 0 && (
         <div className="mt-4">
-          <h4>
-            Products Breakdown with Ingredient LOT: <b>{ingredientLotCode}</b>
-          </h4>
-          <table className="table table-bordered table-responsive-sm">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Batch Lot Code</th>
-                <th>Quantity Produced</th>
-                <th>Quantity Allocated</th>
-                <th>Quantity in Inventory</th>
-              </tr>
-            </thead>
+          <h4>Products Breakdown for Ingredient {ingredientLotCode}</h4>
+          <table className="table table-bordered">
+            <thead><tr><th>Product</th><th>Batch</th><th>Produced</th><th>Allocated</th><th>In Inventory</th></tr></thead>
             <tbody>
-              {ingredientBreakdown.map((item, index) => (
-                <tr key={index}>
-                  <td>{item.productName}</td>
-                  <td>{item.batchLotCode}</td>
-                  <td>{item.quantityProduced}</td>
-                  <td>{item.quantityAllocated}</td>
-                  <td>{item.quantityInInventory}</td>
-                </tr>
+              {ingredientBreakdown.map((item,i) => (
+                <tr key={i}><td>{item.productName}</td><td>{item.batchLotCode}</td><td>{item.quantityProduced}</td><td>{item.quantityAllocated}</td><td>{item.quantityInInventory}</td></tr>
+              ))}
+            </tbody>
+          </table>
+          <h5 className="mt-3">Client Allocations</h5>
+          <table className="table table-bordered">
+            <thead><tr><th>Customer</th><th>Product</th><th>Batch</th><th>Quantity</th><th>Date</th></tr></thead>
+            <tbody>
+              {ingredientProducts.map((c,i) => (
+                <tr key={i}><td>{c.customer}</td><td>{c.productName}</td><td>{c.batchLotCode}</td><td>{c.quantity}</td><td>{c.date.split('T')[0]}</td></tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
 
-      {ingredientProducts.length > 0 && (
-        <div className="mt-4">
-          <h4>Products Distributed to Clients</h4>
-          <table className="table table-bordered table-responsive-sm">
-            <thead>
-              <tr>
-                <th>Customer</th>
-                <th>Product</th>
-                <th>Batch Lot Code</th>
-                <th>Quantity</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ingredientProducts.map((client, index) => (
-                <tr key={index}>
-                  <td>{client.customer}</td>
-                  <td>{client.productName}</td>
-                  <td>{client.batchLotCode}</td>
-                  <td>{client.quantity}</td>
-                  <td>{moment.utc(client.date).format('MM/DD/YYYY')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Main Traceability Logs Table with Pagination */}
+      {/* Main Logs & Pagination hidden during ingredient search */}
       {!isIngredientSearchActive && (
-        <div>
-          <h3 className="mt-3">Traceability Table</h3>
-          <table className="table table-bordered table-responsive-sm">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Product</th>
-                <th>Lot Code</th>
-                <th>Quantity</th>
-                <th>Customer</th>
-                <th className="d-none d-md-table-cell">Logged By</th>
-                {userRole === 'admin' && <th>Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {(filteredLogs.length > 0 ? filteredLogs : logs).map((log) => (
-                <tr key={log.id}>
-                  <td>{moment.utc(log.date).format('MM/DD/YYYY')}</td>
-                  <td>{log.Product?.name || 'N/A'}</td>
-                  <td>{log.lotCode}</td>
-                  <td>{log.quantity}</td>
-                  <td>{log.customer}</td>
-                  <td className="d-none d-md-table-cell">{log.logged_by || 'Unknown'}</td>
-                  {userRole === 'admin' && (
-                    <td>
-                      <button className="btn btn-warning btn-sm" onClick={() => handleEdit(log)}>
-                        Edit
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="d-flex justify-content-between align-items-center my-3">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setCurrentPage((prev) => prev - 1)}
-                disabled={currentPage === 1}
-              >
-                &laquo; Previous
-              </button>
-              <span>
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setCurrentPage((prev) => prev + 1)}
-                disabled={currentPage >= totalPages}
-              >
-                Next &raquo;
-              </button>
-            </div>
-          )}
-        </div>
+        <>
+          <TraceabilityTable
+            logs={logs}
+            filteredLogs={filteredLogs}
+            isFiltered={!!searchLotCode || !!productSearchValue}
+            userRole={JSON.parse(atob(token.split('.')[1])).role}
+            onEdit={handleEdit}
+          />
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPrev={() => setPage(page - 1)}
+            onNext={() => setPage(page + 1)}
+          />
+        </>
       )}
+
+      {/* Error Modal */}
+      <Modal show={errorModal.show} onHide={() => setErrorModal({ show: false, message: '' })}>
+        <Modal.Header closeButton style={{ backgroundColor: '#007bff', color: 'white' }}>
+          <Modal.Title style={{ color: 'white' }}>Error</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>{errorModal.message}</Modal.Body>
+        <Modal.Footer>
+          <Button variant="primary" onClick={() => setErrorModal({ show: false, message: '' })}>OK</Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* Hidden Print Section */}
       <div ref={printRef} style={{ display: 'none' }}>
-        {/* <PrintTraceabilityView logs={filteredLogs.length > 0 ? filteredLogs : logs} /> */}
+        <PrintTraceabilityView
+          logs={filteredLogs.length ? filteredLogs : logs}
+          ingredientResults={ingredientBreakdown}
+        />
       </div>
     </div>
   );
 }
-
-export default TraceabilityPage;

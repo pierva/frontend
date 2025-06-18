@@ -8,15 +8,6 @@ function Login() {
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const navigate = useNavigate();
-  const location = useLocation();
-
-  // Redirect if already logged in and on the login page
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token && location.pathname === '/') {
-      navigate('/traceability', { replace: true });
-    }
-  }, [location.pathname, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -1,55 +1,49 @@
+// src/pages/Login.js
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import authService from '../services/authService';
 
 function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [errorMessage, setErrorMessage] = useState(''); // State to track error message
+  const [errorMessage, setErrorMessage] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
 
-    // Redirect if already logged in
-    useEffect(() => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        // Optionally, you can decode and check token expiration here
-        navigate('/traceability');
-      }
-    }, [navigate]);
+  // Redirect if already logged in and on the login page
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token && location.pathname === '/') {
+      navigate('/traceability', { replace: true });
+    }
+  }, [location.pathname, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       await authService.login(username, password);
-      navigate('/logs');
+      navigate('/logs', { replace: true });
     } catch (error) {
       console.error('Login failed', error);
       setErrorMessage('Invalid username or password. Please try again.');
     }
   };
 
-  // Auto-dismiss the error message after 3 seconds
+  // Auto-dismiss error after 5s
   useEffect(() => {
-    if (errorMessage) {
-      const timer = setTimeout(() => {
-        setErrorMessage('');
-      }, 5000);
-      return () => clearTimeout(timer); // Clear timeout if component unmounts
-    }
+    if (!errorMessage) return;
+    const timer = setTimeout(() => setErrorMessage(''), 5000);
+    return () => clearTimeout(timer);
   }, [errorMessage]);
 
   return (
     <div className="container mt-5">
       <h2>Login to PIZZACINI quickLOG</h2>
       <form onSubmit={handleSubmit}>
-        {errorMessage && ( // Show the error message conditionally
+        {errorMessage && (
           <div className="alert alert-danger alert-dismissible fade show" role="alert">
             {errorMessage}
-            <button
-              type="button"
-              className="btn-close"
-              onClick={() => setErrorMessage('')}
-            ></button>
+            <button type="button" className="btn-close" onClick={() => setErrorMessage('')}></button>
           </div>
         )}
         <div className="form-group">
@@ -58,7 +52,7 @@ function Login() {
             type="text"
             className="form-control"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={e => setUsername(e.target.value)}
             required
           />
         </div>
@@ -68,7 +62,7 @@ function Login() {
             type="password"
             className="form-control"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={e => setPassword(e.target.value)}
             required
           />
         </div>

@@ -64,25 +64,6 @@ export async function fetchAllLogsInRange(limitPerPage = 200, searchTerm = '', s
   return all;
 }
 
-/**
- * Aggregate logs into { 'YYYY-MM-DD': totalQuantity }.
- * Optional filter by productId.
- */
-// export function aggregateLogsByDate(logs, productId) {
-//   const out = {};
-//   logs.forEach(l => {
-//     if (productId && String(l.Product?.id || l.productId) !== String(productId)) return;
-//     const dateRaw = l.Batch.production_date || l.date_logged || l.createdAt;
-//     if (!dateRaw) return;
-//     const day = new Date(dateRaw).toISOString().split('T')[0];
-//     const qty = Number(l.quantity) || 0;
-//     out[day] = (out[day] || 0) + qty;
-//   });
-//   return out;
-// }
-
-// in src/services/logService.js
-
 export const aggregateLogsByDate = (
   logs,
   productIdFilter = null,

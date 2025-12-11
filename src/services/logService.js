@@ -60,6 +60,7 @@ export async function fetchAllLogsInRange(limitPerPage = 200, searchTerm = '', s
     if (page >= totalPages) break;
     page += 1;
   }
+  
   return all;
 }
 
@@ -67,18 +68,70 @@ export async function fetchAllLogsInRange(limitPerPage = 200, searchTerm = '', s
  * Aggregate logs into { 'YYYY-MM-DD': totalQuantity }.
  * Optional filter by productId.
  */
-export function aggregateLogsByDate(logs, productId) {
-  const out = {};
-  logs.forEach(l => {
-    if (productId && String(l.Product?.id || l.productId) !== String(productId)) return;
-    const dateRaw = l.date_logged || l.date || l.createdAt;
-    if (!dateRaw) return;
-    const day = new Date(dateRaw).toISOString().split('T')[0];
-    const qty = Number(l.quantity) || 0;
-    out[day] = (out[day] || 0) + qty;
+// export function aggregateLogsByDate(logs, productId) {
+//   const out = {};
+//   logs.forEach(l => {
+//     if (productId && String(l.Product?.id || l.productId) !== String(productId)) return;
+//     const dateRaw = l.Batch.production_date || l.date_logged || l.createdAt;
+//     if (!dateRaw) return;
+//     const day = new Date(dateRaw).toISOString().split('T')[0];
+//     const qty = Number(l.quantity) || 0;
+//     out[day] = (out[day] || 0) + qty;
+//   });
+//   return out;
+// }
+
+// in src/services/logService.js
+
+export const aggregateLogsByDate = (
+  logs,
+  productIdFilter = null,
+  startDate = '',
+  endDate = ''
+) => {
+  const byDate = {};
+
+  const start = startDate ? new Date(startDate) : null;
+  const end = endDate ? new Date(endDate) : null;
+  if (end) {
+    end.setHours(23, 59, 59, 999); // make end date inclusive
+  }
+
+  logs.forEach((log) => {
+    // Prefer Batch.production_date; fallback to date_logged if needed
+    const rawDate =
+      log.Batch?.production_date ||
+      log.Batch?.productionDate || // in case of camelCase somewhere
+      log.date_logged ||
+      log.createdAt;
+
+    if (!rawDate) return;
+
+    const d = new Date(rawDate);
+    if (Number.isNaN(d.getTime())) return;
+
+    // Filter by production date range
+    if (start && d < start) return;
+    if (end && d > end) return;
+
+    // Optional product filter
+    if (
+      productIdFilter &&
+      String(log.productId) !== String(productIdFilter)
+    ) {
+      return;
+    }
+
+    // Group by YYYY-MM-DD
+    const key = d.toISOString().split('T')[0];
+
+    if (!byDate[key]) byDate[key] = 0;
+    byDate[key] += log.quantity || 0;
   });
-  return out;
-}
+
+  return byDate;
+};
+
 
 const logService = {
   getLogs,

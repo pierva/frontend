@@ -33,10 +33,17 @@ export default function ProductionTrendChart() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Pull all logs within date range. (No searchTerm for trend; keep '')
-      const logs = await fetchAllLogsInRange(200, '', startDate, endDate);
-      const aggregated = aggregateLogsByDate(logs, productId || null);
-      const points = Object.keys(aggregated).sort().map(d => ({ x: d, y: aggregated[d] }));
+      // Fetch all logs (up to maxPages * 200) and do production-date filtering on frontend
+      const logs = await fetchAllLogsInRange(200, '', '', '');
+      const aggregated = aggregateLogsByDate(
+        logs,
+        productId || null,
+        startDate,
+        endDate
+      );
+      const points = Object.keys(aggregated)
+        .sort()
+        .map(d => ({ x: d, y: aggregated[d] }));
       setSeries(points);
     } catch (e) {
       console.error('Error fetching trend data', e);

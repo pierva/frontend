@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import logService from '../services/logService';
 import ProductionTrendChart from '../components/ProductionTrendChart';
 
@@ -11,7 +11,6 @@ function ProductionLog() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-
   const [totalLogs, setTotalLogs] = useState(0); // eslint-disable-line no-unused-vars
 
   // Effective filter state: these are used in the API call.
@@ -24,11 +23,22 @@ function ProductionLog() {
   const [inputStartDate, setInputStartDate] = useState('');
   const [inputEndDate, setInputEndDate] = useState('');
 
-  // Fetch logs whenever pagination or effective filters change
+  // Sorting state
+  const [sortConfig, setSortConfig] = useState({
+    key: 'production_date',   // default sort
+    direction: 'desc',        // 'asc' or 'desc'
+  });
+
   useEffect(() => {
     const loadLogs = async () => {
       try {
-        const data = await logService.getLogs(currentPage, 50, searchTerm, startDate, endDate);
+        const data = await logService.getLogs(
+          currentPage,
+          50,
+          searchTerm,
+          startDate,
+          endDate
+        );
         setLogs(data.logs);
         setTotalPages(data.totalPages);
         setTotalLogs(data.totalLogs);
@@ -40,21 +50,18 @@ function ProductionLog() {
     loadLogs();
   }, [currentPage, searchTerm, startDate, endDate]);
 
-  // Handle the filter form submission
   const handleFilterSubmit = (e) => {
     e.preventDefault();
-    // When the form is submitted, update the effective filters
     setSearchTerm(inputSearch);
     setStartDate(inputStartDate);
     setEndDate(inputEndDate);
-    // Reset to first page
     setCurrentPage(1);
   };
 
-  // Open modal and load ingredients for a specific log
   const handleRowClick = (log) => {
     setSelectedLog(log);
-    logService.getIngredientsByLotCode(log.batchId)
+    logService
+      .getIngredientsByLotCode(log.batchId)
       .then((data) => setIngredients(data))
       .catch((err) => console.error('Error fetching ingredients:', err));
     setIsModalOpen(true);
@@ -66,10 +73,73 @@ function ProductionLog() {
     setIsModalOpen(false);
   };
 
+  // --- Sorting helpers ---
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        // toggle direction
+        return {
+          key,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      // new key: default to ascending
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const getSortArrow = (key) => {
+    if (sortConfig.key !== key) return null;
+    return sortConfig.direction === 'asc' ? ' ▲' : ' ▼';
+  };
+
+  const sortedLogs = useMemo(() => {
+    const clone = [...logs];
+    const { key, direction } = sortConfig;
+
+    const dir = direction === 'asc' ? 1 : -1;
+
+    return clone.sort((a, b) => {
+      let aVal;
+      let bVal;
+
+      switch (key) {
+        case 'product':
+          aVal = (a.Product?.name || '').toLowerCase();
+          bVal = (b.Product?.name || '').toLowerCase();
+          break;
+        case 'quantity':
+          aVal = Number(a.quantity) || 0;
+          bVal = Number(b.quantity) || 0;
+          break;
+        case 'date_logged':
+          aVal = a.date_logged ? new Date(a.date_logged).getTime() : 0;
+          bVal = b.date_logged ? new Date(b.date_logged).getTime() : 0;
+          break;
+        case 'production_date':
+          aVal = a.Batch?.production_date
+            ? new Date(a.Batch.production_date).getTime()
+            : 0;
+          bVal = b.Batch?.production_date
+            ? new Date(b.Batch.production_date).getTime()
+            : 0;
+          break;
+        default:
+          aVal = 0;
+          bVal = 0;
+      }
+
+      if (aVal < bVal) return -1 * dir;
+      if (aVal > bVal) return 1 * dir;
+      return 0;
+    });
+  }, [logs, sortConfig]);
+
   return (
     <div className="container mt-5">
       <h2 className="text-center">Production Log</h2>
-      
+
       {/* Analytics */}
       <ProductionTrendChart />
 
@@ -119,19 +189,45 @@ function ProductionLog() {
       <table className="table table-bordered table-responsive-sm">
         <thead>
           <tr>
-            <th>Product</th>
-            <th>Quantity</th>
+            <th
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleSort('product')}
+            >
+              Product{getSortArrow('product')}
+            </th>
+            <th
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleSort('quantity')}
+            >
+              Quantity{getSortArrow('quantity')}
+            </th>
             <th>Lot Code</th>
-            <th>Date Logged</th>
+            <th
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleSort('date_logged')}
+            >
+              Date Logged{getSortArrow('date_logged')}
+            </th>
+            <th
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleSort('production_date')}
+            >
+              Production Date{getSortArrow('production_date')}
+            </th>
           </tr>
         </thead>
         <tbody>
-          {logs.map((log) => (
-            <tr key={log.id} onClick={() => handleRowClick(log)} style={{ cursor: 'pointer' }}>
+          {sortedLogs.map((log) => (
+            <tr
+              key={log.id}
+              onClick={() => handleRowClick(log)}
+              style={{ cursor: 'pointer' }}
+            >
               <td>{log.Product?.name || 'Unknown Product'}</td>
               <td>{log.quantity}</td>
               <td>{log.Batch?.lotCode || 'N/A'}</td>
               <td>{new Date(log.date_logged).toLocaleString()}</td>
+              <td>{log.Batch?.production_date || 'N/A'}</td>
             </tr>
           ))}
         </tbody>
@@ -160,7 +256,12 @@ function ProductionLog() {
 
       {/* Ingredients Modal */}
       {isModalOpen && selectedLog && (
-        <div className="modal show d-block" tabIndex="-1" role="dialog" style={{ marginTop: '75px' }}>
+        <div
+          className="modal show d-block"
+          tabIndex="-1"
+          role="dialog"
+          style={{ marginTop: '75px' }}
+        >
           <div
             className="modal-dialog"
             role="document"
@@ -171,7 +272,10 @@ function ProductionLog() {
             }}
           >
             <div className="modal-content">
-              <div className="modal-header" style={{ backgroundColor: '#1b2638', color: 'white' }}>
+              <div
+                className="modal-header"
+                style={{ backgroundColor: '#1b2638', color: 'white' }}
+              >
                 <h5 className="modal-title">
                   Ingredients for Lot Code: {selectedLog.Batch?.lotCode || 'N/A'}
                 </h5>

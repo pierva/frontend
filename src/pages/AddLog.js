@@ -9,6 +9,10 @@ function AddLog() {
   const [ingredients, setIngredients] = useState([]);
   const [message, setMessage] = useState('');
   const [lotCode, setLotCode] = useState('');
+  const [productionDate, setProductionDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().slice(0, 10); // YYYY-MM-DD for <input type="date">
+  });
   const [entries, setEntries] = useState([
     { productId: '', productName: '', quantity: '' }
   ]);
@@ -130,6 +134,12 @@ function AddLog() {
 
   const handleSubmit = async e => {
     e.preventDefault();
+
+    if (!productionDate) {
+      setMessage('Please select a production date.');
+      return autoDismissMessage();
+    }
+
     if (entries.some(en => !en.productId || !en.quantity)) {
       setMessage('Please fill out all product fields.');
       return autoDismissMessage();
@@ -140,17 +150,21 @@ function AddLog() {
       setMessage('Please fill out all ingredient fields.');
       return autoDismissMessage();
     }
+
     try {
       await logService.addBatchLogs({
-        entries: entries.map(en => ({ ...en, lotCode })),
+        entries: entries.map(en => ({ ...en, lotCode })), // backend uses batchId & lotCode from batch
         ingredientEntries,
         lotCode,
+        production_date: productionDate, // <<< important: matches backend destructuring
       });
       setMessage('Production batch submitted successfully.');
       autoDismissMessage();
       setEntries([{ productId: '', productName: '', quantity: '' }]);
       setIngredientEntries([{ ingredientId: '', ingredientLotCode: '' }]);
       setLotCode(generatePizzaciniLotCode());
+      const today = new Date();
+      setProductionDate(today.toISOString().slice(0, 10));
     } catch (err) {
       console.error(err);
       setMessage('Error submitting batch logs.');
@@ -179,16 +193,28 @@ function AddLog() {
       )}
 
       <form onSubmit={handleSubmit}>
-        <h4>Batch Lot Code</h4>
-        <div className="mb-3">
-          <label>Lot Code</label>
-          <input
-            type="text"
-            className="form-control"
-            value={lotCode}
-            onChange={e => setLotCode(e.target.value)}
-            required
-          />
+        <h4>Batch Lot & Date</h4>
+        <div className="row mb-3">
+          <div className="col-md-6 col-12 mb-2 mb-md-0">
+            <label>Lot Code</label>
+            <input
+              type="text"
+              className="form-control"
+              value={lotCode}
+              onChange={e => setLotCode(e.target.value)}
+              required
+            />
+          </div>
+          <div className="col-md-6 col-12">
+            <label>Production Date</label>
+            <input
+              type="date"
+              className="form-control"
+              value={productionDate}
+              onChange={e => setProductionDate(e.target.value)}
+              required
+            />
+          </div>
         </div>
 
         <h4>Products</h4>

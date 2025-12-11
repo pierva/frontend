@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import logService from '../services/logService';
+import ProductionTrendChart from '../components/ProductionTrendChart';
 
 function ProductionLog() {
   const [logs, setLogs] = useState([]);
@@ -68,6 +69,9 @@ function ProductionLog() {
   return (
     <div className="container mt-5">
       <h2 className="text-center">Production Log</h2>
+      
+      {/* Analytics */}
+      <ProductionTrendChart />
 
       {/* Filter Form */}
       <form onSubmit={handleFilterSubmit} className="mt-4 mb-4">

@@ -17,6 +17,7 @@ import AdminProductPage from './pages/AdminProductPage';
 import AdminOrdersPage from './pages/AdminOrdersPage';
 import FactoryOrdersPage from './pages/FactoryOrdersPage';
 import AdminCustomerPage from './pages/AdminCustomerPage';
+import TrendsAnalyticsPage from './pages/TrendsAnalyticsPage';
 
 function App() {
   const token = localStorage.getItem('token');
@@ -88,6 +89,12 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+      <Route path="/admin/trends" 
+        element={<ProtectedRoute allowedRoles={['admin']}>
+          <TrendsAnalyticsPage />
+          </ProtectedRoute>} 
+      />
 
         {/* Factory and admin can view/fulfill orders */}
         <Route

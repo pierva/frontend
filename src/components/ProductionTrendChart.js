@@ -6,8 +6,6 @@ import {
 import 'chartjs-adapter-date-fns';
 import logService, { fetchAllLogsInRange, aggregateLogsByDate } from '../services/logService';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, TimeScale);
-
 export default function ProductionTrendChart() {
   const [products, setProducts] = useState([]);
   const [productId, setProductId] = useState('');

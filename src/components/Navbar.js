@@ -138,7 +138,7 @@ function Navbar() {
                         </Link>
                       </li>
                       <li className="nav-item">
-                        <Link className="nav-link" to="/admin/trends">
+                        <Link className="nav-link" to="/trends">
                           Trends and Analytics
                         </Link>
                       </li>

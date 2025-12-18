@@ -4,7 +4,9 @@ import { Link } from 'react-router-dom';
 import analyticsService from '../../services/analyticsService';
 import logService from '../../services/logService';
 import complaintService from '../../services/complaintService';
-import { Line, Bar } from 'react-chartjs-2';
+import TrendLineChart from '../../components/charts/TrendLineChart';
+import TrendBarChart from '../../components/charts/TrendBarChart';
+
 
 export default function ComplaintTrendsPage() {
     const [products, setProducts] = useState([]);
@@ -13,11 +15,10 @@ export default function ComplaintTrendsPage() {
     const [listLoading, setListLoading] = useState(false);
     const [guidanceRules, setGuidanceRules] = useState([]);
 
-
     const [sort, setSort] = useState({ key: 'complaint_date', dir: 'desc' }); // default
     const [page, setPage] = useState(1);
     const pageSize = 25;
-
+    const [widgetConfig, setWidgetConfig] = useState(null);
     const [filters, setFilters] = useState({
         startDate: '',
         endDate: '',
@@ -47,26 +48,26 @@ export default function ComplaintTrendsPage() {
     });
 
 
- const openComplaint = (c) => {
-  setSelectedComplaint(c);
-  setIsModalOpen(true);
-  setIsEditing(false);
+    const openComplaint = (c) => {
+        setSelectedComplaint(c);
+        setIsModalOpen(true);
+        setIsEditing(false);
 
-  setEditForm({
-    complaint_date: c.complaint_date || '',
-    severityLevel: c.severityLevel ? String(c.severityLevel) : '',
-    categoryId: c.categoryId ? String(c.categoryId) : '',
-    productId: c.productId ? String(c.productId) : '',
-    batchId: c.batchId ? String(c.batchId) : '',
-    guidanceRuleId: c.guidanceRuleId ? String(c.guidanceRuleId) : '',
-    riskType: c.riskType || '',
-    capaRequired: !!c.capaRequired,
-    capaReason: c.capaReason || '',
-    source: c.source || 'CUSTOMER',
-    customer_name: c.customer_name || '',
-    notes: c.notes || '',
-  });
-};
+        setEditForm({
+            complaint_date: c.complaint_date || '',
+            severityLevel: c.severityLevel ? String(c.severityLevel) : '',
+            categoryId: c.categoryId ? String(c.categoryId) : '',
+            productId: c.productId ? String(c.productId) : '',
+            batchId: c.batchId ? String(c.batchId) : '',
+            guidanceRuleId: c.guidanceRuleId ? String(c.guidanceRuleId) : '',
+            riskType: c.riskType || '',
+            capaRequired: !!c.capaRequired,
+            capaReason: c.capaReason || '',
+            source: c.source || 'CUSTOMER',
+            customer_name: c.customer_name || '',
+            notes: c.notes || '',
+        });
+    };
 
     const toNull = (v) => (v === '' || v === undefined ? null : v);
     const toIntOrNull = (v) => {
@@ -105,7 +106,6 @@ export default function ComplaintTrendsPage() {
         }
     };
 
-
     const confirmDelete = async () => {
         if (!selectedComplaint) return;
         const ok = window.confirm(`Delete complaint #${selectedComplaint.id}? This cannot be undone.`);
@@ -122,14 +122,12 @@ export default function ComplaintTrendsPage() {
         }
     };
 
-
     const closeComplaint = () => {
         setSelectedComplaint(null);
         setIsModalOpen(false);
     };
 
     const formatDateTime = (v) => (v ? new Date(v).toLocaleString() : '—');
-
 
     const [loading, setLoading] = useState(false);
     const [widget, setWidget] = useState(null);
@@ -142,24 +140,11 @@ export default function ComplaintTrendsPage() {
         3: '#eb5757', // red
     };
 
-    const BRAND_DARK = '#1b2638';
-
     const CATEGORY_PALETTE = [
         '#2f80ed', '#56ccf2', '#9b51e0', '#27ae60',
         '#f2994a', '#eb5757', '#f2c94c', '#6fcf97',
         '#bb6bd9', '#219653'
     ];
-
-    function colorForCategory(categoryName = '') {
-        // stable hash -> stable color
-        let hash = 0;
-        for (let i = 0; i < categoryName.length; i++) {
-            hash = (hash << 5) - hash + categoryName.charCodeAt(i);
-            hash |= 0;
-        }
-        const idx = Math.abs(hash) % CATEGORY_PALETTE.length;
-        return CATEGORY_PALETTE[idx];
-    }
 
     const severityBadgeStyle = (lvl) => ({
         backgroundColor: SEVERITY_COLORS[lvl] || '#adb5bd',
@@ -171,6 +156,18 @@ export default function ComplaintTrendsPage() {
         display: 'inline-block',
     });
 
+    const COMPLAINTS_PER_10K_THRESHOLDS = {
+        greenMax: 1.0,   // < 1.0 / 10k
+        amberMax: 2.0    // 1.0–2.0 / 10k, >2.0 red
+    };
+
+    function getComplaintsPer10kStatus(value) {
+        const v = Number(value);
+        if (!Number.isFinite(v)) return { label: '—', color: '#6c757d' }; // grey
+        if (v < COMPLAINTS_PER_10K_THRESHOLDS.greenMax) return { label: 'Green', color: '#198754' };
+        if (v <= COMPLAINTS_PER_10K_THRESHOLDS.amberMax) return { label: 'Warning', color: '#fd7e14' };
+        return { label: 'Action', color: '#dc3545' };
+    }
 
 
     useEffect(() => {
@@ -178,12 +175,15 @@ export default function ComplaintTrendsPage() {
             try {
                 const prods = await logService.getProducts();
                 setProducts(prods || []);
-                
+
                 const cats = await complaintService.getCategories();
                 setCategories(cats || []);
 
                 const rules = await complaintService.getGuidanceRules();
                 setGuidanceRules(rules || []);
+
+                const cfgRes = await analyticsService.getWidgetConfig('complaints.summary');
+                setWidgetConfig(cfgRes?.config || null)
             } catch (e) {
                 console.error(e);
             }
@@ -285,8 +285,6 @@ export default function ComplaintTrendsPage() {
         );
     };
 
-
-
     const fetchWidget = async () => {
         setLoading(true);
         try {
@@ -308,53 +306,29 @@ export default function ComplaintTrendsPage() {
     }, [filters.startDate, filters.endDate, filters.productId, filters.categoryId, filters.severityLevel]);
 
     const kpis = widget?.kpis;
+    const complaintsRate = kpis?.complaintsPer10k;
+    const complaintsRateStatus = getComplaintsPer10kStatus(complaintsRate);
+    const complaintsPer10k = Number(widget?.kpis?.complaintsPer10k ?? 0);
 
-    const lineData = useMemo(() => {
-        const pts = widget?.charts?.complaintsOverTime || [];
-        return {
-            datasets: [{
-                label: 'Complaints over time',
-                data: pts.map(p => ({ x: p.x, y: p.y })), // IMPORTANT
-                borderColor: BRAND_DARK,
-                backgroundColor: 'rgba(27, 38, 56, 0.15)',
-                borderWidth: 2,
-                tension: 0.25,
-                pointRadius: 3,
-                pointBackgroundColor: BRAND_DARK,
-                fill: true,
-            }]
-        };
-    }, [widget]);
+const thresholds = widgetConfig?.thresholds?.complaintsPer10k || { greenMax: 1, amberMax: 2 };
 
-    const lineOptions = useMemo(() => ({
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-            x: {
-                type: 'time',
-                time: {
-                    unit: filters.granularity === 'month' ? 'month' : 'day',
-                    tooltipFormat: filters.granularity === 'month' ? 'yyyy-MM' : 'yyyy-MM-dd',
-                },
-            },
-            y: { beginAtZero: true },
-        },
-    }), [filters.granularity]);
+const getThresholdStatus = (value) => {
+  const g = Number(thresholds.greenMax);
+  const a = Number(thresholds.amberMax);
 
+  if (Number.isFinite(g) && value <= g) return 'green';
+  if (Number.isFinite(a) && value <= a) return 'amber';
+  return 'red';
+};
 
+const status = getThresholdStatus(complaintsPer10k);
 
-    const barData = useMemo(() => {
-        const rows = widget?.charts?.complaintsByCategory || [];
-        return {
-            labels: rows.map(r => r.categoryName),
-            datasets: [{
-                label: 'By category',
-                data: rows.map(r => r.count),
-                backgroundColor: rows.map(r => colorForCategory(r.categoryName)),
-                borderWidth: 1
-            }]
-        };
-    }, [widget]);
+const statusColor = status === 'green'
+  ? '#27ae60'
+  : status === 'amber'
+  ? '#f2994a'
+  : '#eb5757';
+
 
     return (
         <div className="card">
@@ -450,15 +424,57 @@ export default function ComplaintTrendsPage() {
                 {/* KPI Tiles */}
                 <div className="row mt-3 g-2">
                     <div className="col-12 col-md-3">
-                        <div className="card" style={{ borderLeft: `4px solid ${SEVERITY_COLORS[3]}` }}>
+
+                        <div className="card" style={{ position: 'relative', overflow: 'hidden' }}>
+  <div
+    style={{
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: 6,
+      background: statusColor
+    }}
+  />
+  <div className="card-body" style={{ paddingLeft: 18 }}>
+    <div className="text-muted">Complaints / 10,000 units</div>
+    <div style={{ fontSize: 22, fontWeight: 600 }}>
+      {kpis ? kpis.complaintsPer10k : '—'}
+    </div>
+    <div className="text-muted" style={{ fontSize: 12 }}>
+      Green ≤ {thresholds.greenMax} • Amber ≤ {thresholds.amberMax} • Red &gt; {thresholds.amberMax}
+    </div>
+  </div>
+</div>
+
+                        {/* <div
+                            className="card"
+                            style={{
+                                borderLeft: `8px solid ${complaintsRateStatus.color}`,
+                            }}
+                        >
                             <div className="card-body">
-                                <div className="text-muted">Complaints / 10,000 units</div>
+                                <div className="d-flex justify-content-between align-items-start gap-2">
+                                    <div className="text-muted">Complaints / 10,000 units</div>
+                                    <span
+                                        className="badge"
+                                        style={{ backgroundColor: complaintsRateStatus.color }}
+                                    >
+                                        {complaintsRateStatus.label}
+                                    </span>
+                                </div>
+
                                 <div style={{ fontSize: 22, fontWeight: 600 }}>
                                     {kpis ? kpis.complaintsPer10k : '—'}
                                 </div>
+
+                                <div className="text-muted" style={{ fontSize: 12 }}>
+                                    Green &lt; {COMPLAINTS_PER_10K_THRESHOLDS.greenMax} • Warning ≤ {COMPLAINTS_PER_10K_THRESHOLDS.amberMax} • Red &gt; {COMPLAINTS_PER_10K_THRESHOLDS.amberMax}
+                                </div>
                             </div>
-                        </div>
+                        </div> */}
                     </div>
+
                     <div className="col-12 col-md-3">
                         <div className="card">
                             <div className="card-body">
@@ -496,40 +512,32 @@ export default function ComplaintTrendsPage() {
                     <div className="col-12 col-lg-7">
                         <div className="card">
                             <div className="card-body">
-                                <div className="mb-2" style={{ fontWeight: 600 }}>Complaints over time</div>
-                                <div style={{ height: 320 }}>
-                                    {widget?.charts?.complaintsOverTime?.length ? (
-                                        <Line
-                                            ref={lineRef}
-                                            data={lineData}
-                                            options={lineOptions}
-                                            redraw
-                                        />
-                                    ) : (
-                                        <div className="text-muted">No data.</div>
-                                    )}
+                                <TrendLineChart
+                                    title="Complaints over time"
+                                    points={widget?.charts?.complaintsOverTime || []}
+                                    label="Complaints"
+                                    color="#1b2638"
+                                    yAxisTitle="Complaints"
+                                    granularity={filters.granularity}   // <-- restores day/month behavior
+                                />
 
-                                </div>
                             </div>
                         </div>
                     </div>
                     <div className="col-12 col-lg-5">
                         <div className="card">
                             <div className="card-body">
-                                <div className="mb-2" style={{ fontWeight: 600 }}>By category</div>
-                                <div style={{ height: 320 }}>
-                                    {widget?.charts?.complaintsByCategory?.length ? (
-                                        <Bar
-                                            ref={barRef}
-                                            key={`bar-${filters.startDate}-${filters.endDate}-${filters.productId}-${filters.categoryId}-${filters.severityLevel}`}
-                                            data={barData}
-                                            redraw
-                                        />
-                                    ) : (
-                                        <div className="text-muted">No data.</div>
+                                <TrendBarChart
+                                    title="By category"
+                                    labels={(widget?.charts?.complaintsByCategory || []).map(r => r.categoryName)}
+                                    values={(widget?.charts?.complaintsByCategory || []).map(r => r.count)}
+                                    // optional: give each bar a different color (simple deterministic palette)
+                                    colors={(widget?.charts?.complaintsByCategory || []).map((_, idx) =>
+                                        CATEGORY_PALETTE[idx % CATEGORY_PALETTE.length]
                                     )}
+                                    yAxisTitle="Complaints"
+                                />
 
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -665,19 +673,19 @@ export default function ComplaintTrendsPage() {
 
                             <div className="modal-body">
                                 <div className="row g-3">
-                                   <div className="col-12 col-md-6">
-  <div className="text-muted" style={{ fontSize: 12 }}>Complaint Date</div>
-  {!isEditing ? (
-    <div style={{ fontWeight: 600 }}>{selectedComplaint.complaint_date || '—'}</div>
-  ) : (
-    <input
-      type="date"
-      className="form-control"
-      value={editForm.complaint_date || ''}
-      onChange={(e) => setEditForm(f => ({ ...f, complaint_date: e.target.value }))}
-    />
-  )}
-</div>
+                                    <div className="col-12 col-md-6">
+                                        <div className="text-muted" style={{ fontSize: 12 }}>Complaint Date</div>
+                                        {!isEditing ? (
+                                            <div style={{ fontWeight: 600 }}>{selectedComplaint.complaint_date || '—'}</div>
+                                        ) : (
+                                            <input
+                                                type="date"
+                                                className="form-control"
+                                                value={editForm.complaint_date || ''}
+                                                onChange={(e) => setEditForm(f => ({ ...f, complaint_date: e.target.value }))}
+                                            />
+                                        )}
+                                    </div>
 
 
                                     <div className="col-12 col-md-6">
@@ -788,25 +796,25 @@ export default function ComplaintTrendsPage() {
                                         ) : null}
                                     </div>
 
-                              <div className="col-12 col-md-6">
-  <div className="text-muted" style={{ fontSize: 12 }}>Guidance Rule</div>
-  {!isEditing ? (
-    <div style={{ fontWeight: 600 }}>{selectedComplaint.GuidanceRule?.label || '—'}</div>
-  ) : (
-    <select
-      className="form-select"
-      value={editForm.guidanceRuleId ?? ''}
-      onChange={(e) => setEditForm(f => ({ ...f, guidanceRuleId: e.target.value }))}
-    >
-      <option value="">None</option>
-      {guidanceRules
-        .filter(r => !editForm.categoryId || String(r.categoryId) === String(editForm.categoryId))
-        .map(r => (
-          <option key={r.id} value={r.id}>{r.label}</option>
-        ))}
-    </select>
-  )}
-</div>
+                                    <div className="col-12 col-md-6">
+                                        <div className="text-muted" style={{ fontSize: 12 }}>Guidance Rule</div>
+                                        {!isEditing ? (
+                                            <div style={{ fontWeight: 600 }}>{selectedComplaint.GuidanceRule?.label || '—'}</div>
+                                        ) : (
+                                            <select
+                                                className="form-select"
+                                                value={editForm.guidanceRuleId ?? ''}
+                                                onChange={(e) => setEditForm(f => ({ ...f, guidanceRuleId: e.target.value }))}
+                                            >
+                                                <option value="">None</option>
+                                                {guidanceRules
+                                                    .filter(r => !editForm.categoryId || String(r.categoryId) === String(editForm.categoryId))
+                                                    .map(r => (
+                                                        <option key={r.id} value={r.id}>{r.label}</option>
+                                                    ))}
+                                            </select>
+                                        )}
+                                    </div>
 
 
                                     <div className="col-12">

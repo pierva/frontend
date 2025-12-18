@@ -24,8 +24,17 @@ const saveWidgetConfig = async (widgetKey, config) => {
   return res.data;
 };
 
-export default { 
+const getProductionSummary = async (filters = {}) => {
+  const response = await axios.get(`${API_URL}/api/analytics/widgets/production.summary`, {
+    headers: authHeaders(),
+    params: filters
+  });
+  return response.data;
+};
+
+export default {
   getComplaintsSummary,
-  getWidgetConfig, 
+  getProductionSummary,
+  getWidgetConfig,
   saveWidgetConfig
 };

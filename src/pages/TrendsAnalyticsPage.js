@@ -3,6 +3,7 @@ import React from 'react';
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom';
 import ComplaintTrendsPage from './trends/ComplaintTrendsPage';
 import ComplaintConfigPage from './trends/ComplaintConfigPage';
+import ProductionTrendsPage from './trends/ProductionTrendsPage';
 
 export default function TrendsAnalyticsPage() {
   return (
@@ -46,7 +47,7 @@ export default function TrendsAnalyticsPage() {
             <Route path="complaints/config" element={<ComplaintConfigPage />} />
 
             {/* Stubs for next sections */}
-            <Route path="production" element={<div className="card"><div className="card-body">Production trends (next).</div></div>} />
+            <Route path="production" element={<ProductionTrendsPage />} />
             <Route path="environmental" element={<div className="card"><div className="card-body">Environmental monitoring trends (next).</div></div>} />
 
             <Route path="*" element={<div className="alert alert-warning">Page not found.</div>} />

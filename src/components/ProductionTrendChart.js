@@ -1,8 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, TimeScale
-} from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import logService, { fetchAllLogsInRange, aggregateLogsByDate } from '../services/logService';
 

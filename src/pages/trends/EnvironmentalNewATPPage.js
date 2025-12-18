@@ -32,10 +32,7 @@ export default function EnvironmentalNewATPPage() {
     locationId: '',
     rlu: '',
     notes: '',
-    // optional fields if your model supports them:
-    // swabType: 'ATP',
-    // device: '',
-    // operatorName: '',
+    timing: 'POST_CLEAN',   // explicit default
   });
 
   // Load locations + config thresholds
@@ -101,6 +98,7 @@ export default function EnvironmentalNewATPPage() {
         sampleDate: form.sampleDate,
         locationId: Number(form.locationId),
         rlu: r,
+        timing: form.timing,
         notes: form.notes ? String(form.notes).trim() : null,
 
         // if your backend expects status, you can send it;
@@ -168,7 +166,7 @@ export default function EnvironmentalNewATPPage() {
             </div>
           </div>
 
-          <div className="col-12 col-md-4">
+          <div className="col-12 col-md-3">
             <label className="form-label mb-1">RLU *</label>
             <input
               type="number"
@@ -180,8 +178,20 @@ export default function EnvironmentalNewATPPage() {
               placeholder="e.g., 120"
             />
           </div>
+          <div className="col-12 col-md-3">
+          <label className="form-label mb-1">Timing *</label>
+          <select
+            className="form-select"
+            value={form.timing}
+            onChange={e => setForm(f => ({ ...f, timing: e.target.value }))}
+          >
+            <option value="POST_CLEAN">Post-clean</option>
+            <option value="PRE_OP">Pre-op</option>
+            <option value="IN_PROCESS">In process</option>
+          </select>
+        </div>
 
-          <div className="col-12 col-md-8">
+          <div className="col-12 col-md-6">
             <label className="form-label mb-1">Notes</label>
             <input
               type="text"

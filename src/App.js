@@ -19,6 +19,7 @@ import FactoryOrdersPage from './pages/FactoryOrdersPage';
 import AdminCustomerPage from './pages/AdminCustomerPage';
 import TrendsAnalyticsPage from './pages/TrendsAnalyticsPage';
 import NewComplaintPage from './pages/trends/NewComplaintPage';
+import ProductionLaborPage from './pages/trends/ProductionLaborPage';
 
 function App() {
   const token = localStorage.getItem('token');
@@ -96,6 +97,13 @@ function App() {
           <TrendsAnalyticsPage />
           </ProtectedRoute>} 
       />
+
+      <Route path="/trends/production/labor" 
+      element={<ProtectedRoute allowedRoles={['admin']}>
+      <ProductionLaborPage />
+      </ProtectedRoute>}
+      />
+
 
       <Route
         path="/trends/complaints/new"

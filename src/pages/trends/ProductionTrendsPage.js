@@ -66,6 +66,9 @@ export default function ProductionTrendsPage() {
         <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
           <h4 className="mb-0">Production Trends</h4>
           <div className="d-flex gap-2">
+            <Link to="/trends/production/labor" className="btn btn-outline-secondary">
+              Labor Info
+            </Link>
             <Link to="/logs" className="btn btn-outline-secondary">Production Log</Link>
             <button className="btn btn-outline-primary" onClick={fetchWidget} disabled={loading}>
               {loading ? 'Loading…' : 'Refresh'}
@@ -166,11 +169,18 @@ export default function ProductionTrendsPage() {
           <div className="col-12 col-lg-5">
             <div className="card"><div className="card-body">
               <DualLineChart
-                title="Units vs employees (monthly)"
-                pointsA={charts.unitsOverTime || []}
-                labelA="Units"
-                pointsB={charts.employeesOverTime || []}
-                labelB="Employees"
+                title="Units Produced vs Labor Cost"
+                pointsA={widget?.charts?.unitsOverTime || []}
+                labelA="Units Produced"
+                pointsB={widget?.charts?.laborCostOverTime || []}
+                labelB="Labor Cost"
+
+                colorA="#1b2638"        // PIZZACINI blue
+                colorB="#f2994a"        // amber/orange for cost
+                useDualAxis
+                axisTitleA="Units"
+                axisTitleB="Labor Cost ($)"
+                formatBAsCurrency
               />
             </div></div>
           </div>

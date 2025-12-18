@@ -32,9 +32,18 @@ const getProductionSummary = async (filters = {}) => {
   return response.data;
 };
 
+const getEnvironmentalSummary = async (filters = {}) => {
+  const response = await axios.get(`${API_URL}/api/analytics/widgets/environmental.summary`, {
+    headers: authHeaders(),
+    params: filters
+  });
+  return response.data;
+};
+
 export default {
   getComplaintsSummary,
   getProductionSummary,
   getWidgetConfig,
-  saveWidgetConfig
+  saveWidgetConfig,
+  getEnvironmentalSummary
 };

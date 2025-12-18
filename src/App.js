@@ -20,6 +20,9 @@ import AdminCustomerPage from './pages/AdminCustomerPage';
 import TrendsAnalyticsPage from './pages/TrendsAnalyticsPage';
 import NewComplaintPage from './pages/trends/NewComplaintPage';
 import ProductionLaborPage from './pages/trends/ProductionLaborPage';
+import EnvironmentalTrendsPage from './pages/trends/EnvironmentalTrendsPage';
+import EnvironmentalConfigPage from './pages/trends/EnvironmentalConfigPage';
+import EnvironmentalNewATPPage from './pages/trends/EnvironmentalNewATPPage';
 
 function App() {
   const token = localStorage.getItem('token');
@@ -92,25 +95,41 @@ function App() {
           }
         />
 
-      <Route path="/trends/*" 
-        element={<ProtectedRoute allowedRoles={['admin']}>
-          <TrendsAnalyticsPage />
-          </ProtectedRoute>} 
-      />
+        <Route path="/trends/*"
+          element={<ProtectedRoute allowedRoles={['admin']}>
+            <TrendsAnalyticsPage />
+          </ProtectedRoute>}
+        />
 
-      <Route path="/trends/production/labor" 
-      element={<ProtectedRoute allowedRoles={['admin']}>
-      <ProductionLaborPage />
-      </ProtectedRoute>}
-      />
+        <Route path="/trends/production/labor"
+          element={<ProtectedRoute allowedRoles={['admin']}>
+            <ProductionLaborPage />
+          </ProtectedRoute>}
+        />
 
 
-      <Route
-        path="/trends/complaints/new"
-        element={<ProtectedRoute allowedRoles={['admin']}>
+        <Route
+          path="/trends/complaints/new"
+          element={<ProtectedRoute allowedRoles={['admin']}>
             <NewComplaintPage />
           </ProtectedRoute>}
-      />
+        />
+
+        <Route path="/trends/environmental"
+          element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}>
+            <EnvironmentalTrendsPage />
+          </ProtectedRoute>}
+        />
+
+        <Route path="/trends/environmental/config"
+          element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}>
+            <EnvironmentalConfigPage />
+          </ProtectedRoute>} />
+
+        <Route path="/trends/environmental/new"
+          element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}>
+            <EnvironmentalNewATPPage />
+          </ProtectedRoute>} />
 
         {/* Factory and admin can view/fulfill orders */}
         <Route

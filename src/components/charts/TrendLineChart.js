@@ -28,11 +28,11 @@ export default function TrendLineChart({
   displayFormats                   // optional override
 }) {
   const data = useMemo(() => ({
-    labels: points.map(p => p.x),
+    // labels: points.map(p => p.x),
     datasets: [
       {
         label,
-        data: points.map(p => p.y),
+        data: points,
         tension: 0.25,
         borderColor: color,
         backgroundColor: fill ? color : undefined,
@@ -56,6 +56,7 @@ export default function TrendLineChart({
       scales: {
         x: {
           type: 'time',
+          adapters: {},
           time: {
             unit,
             tooltipFormat: tooltipFormat || (unit === 'month' ? 'yyyy-MM' : 'yyyy-MM-dd'),

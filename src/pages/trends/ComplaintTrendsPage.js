@@ -14,7 +14,6 @@ export default function ComplaintTrendsPage() {
     const [complaints, setComplaints] = useState([]);
     const [listLoading, setListLoading] = useState(false);
     const [guidanceRules, setGuidanceRules] = useState([]);
-
     const [sort, setSort] = useState({ key: 'complaint_date', dir: 'desc' }); // default
     const [page, setPage] = useState(1);
     const pageSize = 25;
@@ -25,7 +24,7 @@ export default function ComplaintTrendsPage() {
         productId: '',
         categoryId: '',
         severityLevel: '',
-        granularity: 'day',
+        granularity: 'month',
     });
 
     const [selectedComplaint, setSelectedComplaint] = useState(null);
@@ -46,6 +45,11 @@ export default function ComplaintTrendsPage() {
         customer_name: '',
         notes: ''
     });
+
+    const [loading, setLoading] = useState(false);
+    const [widget, setWidget] = useState(null);
+    const lineRef = useRef(null);
+    const barRef = useRef(null);
 
 
     const openComplaint = (c) => {
@@ -100,6 +104,8 @@ export default function ComplaintTrendsPage() {
             setSelectedComplaint((prev) => ({ ...prev, ...updated }));
             setIsEditing(false);
             fetchWidget();
+            // Refresh table list without manual reload
+            await fetchComplaints();
         } catch (e) {
             console.error(e);
             alert('Error saving complaint.');
@@ -116,6 +122,7 @@ export default function ComplaintTrendsPage() {
             closeComplaint();
             fetchWidget(); // refresh KPIs/charts
             // If you have a list of complaints loaded on this page, also remove it from state here.
+            await fetchComplaints();
         } catch (e) {
             console.error(e);
             alert('Error deleting complaint.');
@@ -128,11 +135,6 @@ export default function ComplaintTrendsPage() {
     };
 
     const formatDateTime = (v) => (v ? new Date(v).toLocaleString() : '—');
-
-    const [loading, setLoading] = useState(false);
-    const [widget, setWidget] = useState(null);
-    const lineRef = useRef(null);
-    const barRef = useRef(null);
 
     const SEVERITY_COLORS = {
         1: '#2ecc71', // green
@@ -169,7 +171,6 @@ export default function ComplaintTrendsPage() {
         return { label: 'Action', color: '#dc3545' };
     }
 
-
     useEffect(() => {
         (async () => {
             try {
@@ -203,7 +204,6 @@ export default function ComplaintTrendsPage() {
         };
     }, []);
 
-    useEffect(() => {
         const fetchComplaints = async () => {
             setListLoading(true);
             try {
@@ -224,11 +224,12 @@ export default function ComplaintTrendsPage() {
             }
         };
 
-        fetchComplaints();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filters.startDate, filters.endDate, filters.productId, filters.categoryId, filters.severityLevel]);
+useEffect(() => {
+  fetchComplaints();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [filters.startDate, filters.endDate, filters.productId, filters.categoryId, filters.severityLevel]);
 
-    const sortedComplaints = useMemo(() => {
+        const sortedComplaints = useMemo(() => {
         const rows = [...complaints];
 
         const getVal = (c) => {
@@ -303,31 +304,38 @@ export default function ComplaintTrendsPage() {
     useEffect(() => {
         fetchWidget();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filters.startDate, filters.endDate, filters.productId, filters.categoryId, filters.severityLevel]);
+    }, [
+        filters.startDate, 
+        filters.endDate, 
+        filters.productId, 
+        filters.categoryId, 
+        filters.severityLevel,
+        filters.granularity
+    ]);
 
     const kpis = widget?.kpis;
     const complaintsRate = kpis?.complaintsPer10k;
     const complaintsRateStatus = getComplaintsPer10kStatus(complaintsRate);
     const complaintsPer10k = Number(widget?.kpis?.complaintsPer10k ?? 0);
 
-const thresholds = widgetConfig?.thresholds?.complaintsPer10k || { greenMax: 1, amberMax: 2 };
+    const thresholds = widgetConfig?.thresholds?.complaintsPer10k || { greenMax: 1, amberMax: 2 };
 
-const getThresholdStatus = (value) => {
-  const g = Number(thresholds.greenMax);
-  const a = Number(thresholds.amberMax);
+    const getThresholdStatus = (value) => {
+        const g = Number(thresholds.greenMax);
+        const a = Number(thresholds.amberMax);
 
-  if (Number.isFinite(g) && value <= g) return 'green';
-  if (Number.isFinite(a) && value <= a) return 'amber';
-  return 'red';
-};
+        if (Number.isFinite(g) && value <= g) return 'green';
+        if (Number.isFinite(a) && value <= a) return 'amber';
+        return 'red';
+    };
 
-const status = getThresholdStatus(complaintsPer10k);
+    const status = getThresholdStatus(complaintsPer10k);
 
-const statusColor = status === 'green'
-  ? '#27ae60'
-  : status === 'amber'
-  ? '#f2994a'
-  : '#eb5757';
+    const statusColor = status === 'green'
+        ? '#27ae60'
+        : status === 'amber'
+            ? '#f2994a'
+            : '#eb5757';
 
 
     return (
@@ -414,8 +422,8 @@ const statusColor = status === 'green'
                             value={filters.granularity}
                             onChange={e => setFilters(f => ({ ...f, granularity: e.target.value }))}
                         >
-                            <option value="day">Daily</option>
                             <option value="month">Monthly</option>
+                            <option value="day">Daily</option>
                         </select>
                     </div>
 
@@ -426,53 +434,26 @@ const statusColor = status === 'green'
                     <div className="col-12 col-md-3">
 
                         <div className="card" style={{ position: 'relative', overflow: 'hidden' }}>
-  <div
-    style={{
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: 6,
-      background: statusColor
-    }}
-  />
-  <div className="card-body" style={{ paddingLeft: 18 }}>
-    <div className="text-muted">Complaints / 10,000 units</div>
-    <div style={{ fontSize: 22, fontWeight: 600 }}>
-      {kpis ? kpis.complaintsPer10k : '—'}
-    </div>
-    <div className="text-muted" style={{ fontSize: 12 }}>
-      Green ≤ {thresholds.greenMax} • Amber ≤ {thresholds.amberMax} • Red &gt; {thresholds.amberMax}
-    </div>
-  </div>
-</div>
-
-                        {/* <div
-                            className="card"
-                            style={{
-                                borderLeft: `8px solid ${complaintsRateStatus.color}`,
-                            }}
-                        >
-                            <div className="card-body">
-                                <div className="d-flex justify-content-between align-items-start gap-2">
-                                    <div className="text-muted">Complaints / 10,000 units</div>
-                                    <span
-                                        className="badge"
-                                        style={{ backgroundColor: complaintsRateStatus.color }}
-                                    >
-                                        {complaintsRateStatus.label}
-                                    </span>
-                                </div>
-
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    left: 0,
+                                    top: 0,
+                                    bottom: 0,
+                                    width: 6,
+                                    background: statusColor
+                                }}
+                            />
+                            <div className="card-body" style={{ paddingLeft: 18 }}>
+                                <div className="text-muted">Complaints / 10,000 units</div>
                                 <div style={{ fontSize: 22, fontWeight: 600 }}>
                                     {kpis ? kpis.complaintsPer10k : '—'}
                                 </div>
-
                                 <div className="text-muted" style={{ fontSize: 12 }}>
-                                    Green &lt; {COMPLAINTS_PER_10K_THRESHOLDS.greenMax} • Warning ≤ {COMPLAINTS_PER_10K_THRESHOLDS.amberMax} • Red &gt; {COMPLAINTS_PER_10K_THRESHOLDS.amberMax}
+                                    Green ≤ {thresholds.greenMax} • Amber ≤ {thresholds.amberMax} • Red &gt; {thresholds.amberMax}
                                 </div>
                             </div>
-                        </div> */}
+                        </div>
                     </div>
 
                     <div className="col-12 col-md-3">
@@ -624,8 +605,6 @@ const statusColor = status === 'green'
                         </div>
                     </div>
                 </div>
-
-
             </div>
 
             {isModalOpen && selectedComplaint && (
@@ -687,7 +666,6 @@ const statusColor = status === 'green'
                                         )}
                                     </div>
 
-
                                     <div className="col-12 col-md-6">
                                         <div className="text-muted" style={{ fontSize: 12 }}>Severity</div>
                                         {!isEditing ? (
@@ -708,7 +686,6 @@ const statusColor = status === 'green'
                                         )}
                                     </div>
 
-
                                     <div className="col-12 col-md-6">
                                         <div className="text-muted" style={{ fontSize: 12 }}>Category</div>
                                         {!isEditing ? (
@@ -724,7 +701,6 @@ const statusColor = status === 'green'
                                             </select>
                                         )}
                                     </div>
-
 
                                     <div className="col-12 col-md-6">
                                         <div className="text-muted" style={{ fontSize: 12 }}>Product</div>
@@ -783,8 +759,6 @@ const statusColor = status === 'green'
                                             <div className="text-muted">Enable “CAPA Required” to enter a reason.</div>
                                         )}
                                     </div>
-
-
 
                                     <div className="col-12 col-md-6">
                                         <div className="text-muted" style={{ fontSize: 12 }}>Batch Lot Code</div>

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import analyticsService from '../../services/analyticsService';
 import TrendLineChart from '../../components/charts/TrendLineChart';
 import TrendBarChart from '../../components/charts/TrendBarChart';
+import MultiLineChart from '../../components/charts/MultiLineChart';
+
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL;
@@ -217,6 +219,22 @@ export default function EnvironmentalTrendsPage() {
               />
             </div></div>
           </div>
+
+          <div className="row mt-3 g-3">
+            <div className="col-12">
+              <div className="card">
+                <div className="card-body">
+                  <MultiLineChart
+                    title="Average RLU Trend by Zone"
+                    series={widget?.charts?.rluByZoneOverTime || []}
+                    yAxisTitle="Avg RLU"
+                    granularity={filters.granularity || 'month'}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
 
         {/* List */}

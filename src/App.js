@@ -20,7 +20,6 @@ import AdminCustomerPage from './pages/AdminCustomerPage';
 import TrendsAnalyticsPage from './pages/TrendsAnalyticsPage';
 import NewComplaintPage from './pages/trends/NewComplaintPage';
 import ProductionLaborPage from './pages/trends/ProductionLaborPage';
-import EnvironmentalTrendsPage from './pages/trends/EnvironmentalTrendsPage';
 import EnvironmentalConfigPage from './pages/trends/EnvironmentalConfigPage';
 import EnvironmentalNewATPPage from './pages/trends/EnvironmentalNewATPPage';
 
@@ -107,17 +106,10 @@ function App() {
           </ProtectedRoute>}
         />
 
-
         <Route
           path="/trends/complaints/new"
           element={<ProtectedRoute allowedRoles={['admin']}>
             <NewComplaintPage />
-          </ProtectedRoute>}
-        />
-
-        <Route path="/trends/environmental"
-          element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}>
-            <EnvironmentalTrendsPage />
           </ProtectedRoute>}
         />
 

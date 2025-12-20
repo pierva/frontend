@@ -6,8 +6,8 @@ import logo from '../media/Pizzacini/logo_text.png';
 function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState('');
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);   // bootstrap collapse (mobile)
+  const [isMenuOpen, setIsMenuOpen] = useState(false);   // desktop dropdown (lg+)
 
   const navbarRef = useRef();
   const location = useLocation();
@@ -59,7 +59,7 @@ function Navbar() {
       isFactory,
       canAddLog: isAdmin || isFactory,
       canManageOrders: isAdmin || isFactory,
-      canSubmitOrders: isAdmin,
+      canSubmitOrders: isAdmin || isFactory,
     };
   }, [userRole]);
 
@@ -91,7 +91,7 @@ function Navbar() {
             quickLOG
           </Link>
 
-          {/* Mobile collapse toggle */}
+          {/* Mobile collapse toggle (Bootstrap hamburger) */}
           <button
             className="navbar-toggler"
             type="button"
@@ -141,8 +141,56 @@ function Navbar() {
                     </li>
                   )}
 
-                  {/* Dropdown Menu */}
-                  <li className="nav-item dropdown" style={{ position: 'relative' }}>
+                  {/* MOBILE-ONLY LINKS (appear in the collapsed menu) */}
+                  <li className="nav-item d-lg-none">
+                    <Link className="nav-link" to="/logs" onClick={closeAll}>
+                      Production Logs
+                    </Link>
+                  </li>
+                  <li className="nav-item d-lg-none">
+                    <Link className="nav-link" to="/traceability" onClick={closeAll}>
+                      Traceability
+                    </Link>
+                  </li>
+                  <li className="nav-item d-lg-none">
+                    <Link className="nav-link" to="/inventory" onClick={closeAll}>
+                      Inventory
+                    </Link>
+                  </li>
+
+                  {perms.isAdmin && (
+                    <>
+                      <li className="nav-item d-lg-none">
+                        <Link className="nav-link" to="/trends" onClick={closeAll}>
+                          Trends and Analytics
+                        </Link>
+                      </li>
+                      <li className="nav-item d-lg-none">
+                        <Link className="nav-link" to="/admin/products" onClick={closeAll}>
+                          Create Product
+                        </Link>
+                      </li>
+                      <li className="nav-item d-lg-none">
+                        <Link className="nav-link" to="/admin/users" onClick={closeAll}>
+                          User Management
+                        </Link>
+                      </li>
+                      <li className="nav-item d-lg-none">
+                        <Link className="nav-link" to="/admin/customers" onClick={closeAll}>
+                          Customers
+                        </Link>
+                      </li>
+                    </>
+                  )}
+
+                  <li className="nav-item d-lg-none">
+                    <button className="btn btn-outline-danger w-100 mt-2" onClick={handleLogout}>
+                      Logout
+                    </button>
+                  </li>
+
+                  {/* DESKTOP-ONLY DROPDOWN (lg+) */}
+                  <li className="nav-item dropdown d-none d-lg-block" style={{ position: 'relative' }}>
                     <button
                       className="btn btn-outline-light"
                       type="button"
@@ -159,7 +207,6 @@ function Navbar() {
                       ☰
                     </button>
 
-
                     <div
                       className={`dropdown-menu ${isMenuOpen ? 'show' : ''}`}
                       style={{
@@ -171,8 +218,6 @@ function Navbar() {
                         overflowWrap: 'break-word',
                       }}
                     >
-
-                      {/* Common links */}
                       <Link className="dropdown-item" to="/logs" onClick={closeAll}>
                         Production Logs
                       </Link>

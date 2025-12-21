@@ -10,12 +10,16 @@ export default function ProductionTrendsPage() {
   const [loading, setLoading] = useState(false);
   const [widget, setWidget] = useState(null);
 
-  const [filters, setFilters] = useState({
-    startDate: '',
-    endDate: '',
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const toISODate = (d) => d.toISOString().split('T')[0];
+
+  const [filters, setFilters] = useState(() => ({
+    startDate: `${yyyy}-01-01`,
+    endDate: toISODate(today),
     productId: '',
     granularity: 'month', // fixed monthly; keep for future
-  });
+  }));
 
   useEffect(() => {
     (async () => {

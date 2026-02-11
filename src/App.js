@@ -22,9 +22,11 @@ import NewComplaintPage from './pages/trends/NewComplaintPage';
 import ProductionLaborPage from './pages/trends/ProductionLaborPage';
 import EnvironmentalConfigPage from './pages/trends/EnvironmentalConfigPage';
 import EnvironmentalNewATPPage from './pages/trends/EnvironmentalNewATPPage';
+import authService from './services/authService';
 
 function App() {
-  const token = localStorage.getItem('token');
+  const isAuthed = authService.isTokenValid();
+  if (!isAuthed) authService.clearToken(); // optional but recommended
 
   return (
     <Router>
@@ -34,7 +36,7 @@ function App() {
         <Route
           path="/"
           element={
-            token
+            isAuthed
               ? <Navigate to="/traceability" replace />
               : <Login />
           }
@@ -88,7 +90,7 @@ function App() {
         <Route
           path="/admin/orders"
           element={
-            <ProtectedRoute adminOnly={true}>
+            <ProtectedRoute allowedRoles={['admin']}>
               <AdminOrdersPage />
             </ProtectedRoute>
           }

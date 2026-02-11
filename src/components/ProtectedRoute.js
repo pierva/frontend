@@ -1,36 +1,40 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode'; // Import jwtDecode as a named import
+import { jwtDecode } from 'jwt-decode';
 
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const token = localStorage.getItem('token');
 
+  const logoutAndRedirect = () => {
+    localStorage.removeItem('token');
+    return <Navigate to="/" replace />;
+  };
+
   if (!token) {
-    // If no token, redirect to the login page
-    return <Navigate to="/" />;
+    return <Navigate to="/" replace />;
   }
 
   try {
     const decodedToken = jwtDecode(token);
     const userRole = decodedToken.role;
-    const currentTime = Math.floor(Date.now() / 1000); // Current time in seconds
+    const currentTime = Math.floor(Date.now() / 1000);
 
-    // Check if token is expired
-    if (decodedToken.exp < currentTime) {
-      // Redirect to login if the token has expired
-      return <Navigate to="/" />;
+    // If token missing exp or expired -> clear it (prevents redirect loops)
+    if (!decodedToken?.exp || decodedToken.exp <= currentTime) {
+      return logoutAndRedirect();
     }
 
-    // If allowedRoles is specified and the user's role is not in it, redirect
+    // Role gating
     if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
-      return <Navigate to="/" />;
+      // Optional: don't clear token here because user is authenticated, just unauthorized
+      // But redirecting to "/" could cause confusion if "/" redirects; better to go to a safe page:
+      return <Navigate to="/traceability" replace />;
     }
 
-    // If the user is allowed, render the protected content
     return children;
   } catch (error) {
-    // In case of token decoding failure, redirect to login
-    return <Navigate to="/" />;
+    // Decoding failed -> token is junk -> clear it
+    return logoutAndRedirect();
   }
 };
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 import logo from '../media/Pizzacini/logo_text.png';
 
@@ -11,14 +11,32 @@ function Navbar() {
 
   const navbarRef = useRef();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const checkLoginStatus = () => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      setIsLoggedIn(true);
-      const decodedToken = jwtDecode(token);
-      setUserRole(decodedToken.role);
-    } else {
+  const token = localStorage.getItem('token');
+if (!token) {
+    setIsLoggedIn(false);
+    setUserRole('');
+    return;
+  }
+
+  try {
+    const decodedToken = jwtDecode(token);
+    const nowSec = Math.floor(Date.now() / 1000);
+
+    // if no exp or expired => treat as logged out
+    if (!decodedToken?.exp || decodedToken.exp <= nowSec) {
+      localStorage.removeItem('token');
+      setIsLoggedIn(false);
+      setUserRole('');
+      return;
+    }
+
+    setIsLoggedIn(true);
+    setUserRole(decodedToken.role || '');
+    } catch (e) {
+      localStorage.removeItem('token');
       setIsLoggedIn(false);
       setUserRole('');
     }
@@ -46,7 +64,7 @@ function Navbar() {
     localStorage.removeItem('token');
     setIsLoggedIn(false);
     setUserRole('');
-    window.location.href = '/';
+    navigate('/', { replace: true });
   };
 
   const logoUrl = process.env.REACT_APP_LOGO_URL || logo;

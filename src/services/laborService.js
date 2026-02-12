@@ -30,4 +30,10 @@ const deleteMonthly = async (month) => {
   return res.data;
 };
 
-export default { listMonthly, upsertMonthly, deleteMonthly };
+const laborService = {
+  listMonthly,
+  upsertMonthly,
+  deleteMonthly,
+};
+
+export default laborService;

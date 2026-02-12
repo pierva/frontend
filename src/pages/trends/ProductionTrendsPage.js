@@ -1,9 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import analyticsService from '../../services/analyticsService';
 import logService from '../../services/logService';
 import TrendLineChart from '../../components/charts/TrendLineChart';
 import DualLineChart from '../../components/charts/DualLineChart';
+
+const EMPTY_CHARTS = Object.freeze({});
+const EMPTY_POINTS = Object.freeze([]);
 
 export default function ProductionTrendsPage() {
   const [products, setProducts] = useState([]);
@@ -32,7 +35,7 @@ export default function ProductionTrendsPage() {
     })();
   }, []);
 
-  const fetchWidget = async () => {
+  const fetchWidget = useCallback(async () => {
     setLoading(true);
     try {
       const data = await analyticsService.getProductionSummary({ ...filters });
@@ -43,36 +46,32 @@ export default function ProductionTrendsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
   useEffect(() => {
     fetchWidget();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.startDate, filters.endDate, filters.productId, filters.granularity]);
+  }, [fetchWidget]);
 
   // Safe accessors
-  const kpis = widget?.kpis || {};
-  const delta = kpis?.delta || {};
-  const charts = widget?.charts || {};
+  const kpis = widget?.kpis ?? {};
+  const delta = kpis?.delta ?? {};
+  const charts = widget?.charts ?? EMPTY_CHARTS;
 
-  const missingMonths = widget?.meta?.missingLaborMonths || [];
+  const missingMonths = widget?.meta?.missingLaborMonths ?? [];
+  console.log(widget?.meta);
+  
   const laborDataComplete = widget?.meta?.laborDataComplete !== false;
 
+  // Stable chart arrays (avoid creating new [] each render)
+  const unitsOverTime = charts.unitsOverTime ?? EMPTY_POINTS;
+  const laborCostOverTime = charts.laborCostOverTime ?? EMPTY_POINTS;
+
   // Prefer whichever key your backend returns
-  const unitsProduced =
-    (kpis.unitsProduced ?? kpis.producedUnits ?? null);
-
-  const unitsPerEmployee =
-    (kpis.unitsPerEmployee ?? null);
-
-  const laborHoursPer1000Units =
-    (kpis.laborHoursPer1000Units ?? null);
-
-  const laborCostPerUnit =
-    (kpis.laborCostPerUnit ?? null);
-
-  const scrapRatePct =
-    (kpis.scrapRatePct ?? null);
+  const unitsProduced = (kpis.unitsProduced ?? kpis.producedUnits ?? null);
+  const unitsPerEmployee = (kpis.unitsPerEmployee ?? null);
+  const laborHoursPer1000Units = (kpis.laborHoursPer1000Units ?? null);
+  const laborCostPerUnit = (kpis.laborCostPerUnit ?? null);
+  const scrapRatePct = (kpis.scrapRatePct ?? null);
 
   // Format helpers
   const fmtNum = (v, digits = 0) => {
@@ -95,10 +94,8 @@ export default function ProductionTrendsPage() {
 
   // Show “no data” nicely if the widget failed to load
   const hasAnyChartData = useMemo(() => {
-    const a = charts.unitsOverTime || [];
-    const b = charts.laborCostOverTime || [];
-    return a.length > 0 || b.length > 0;
-  }, [charts]);
+    return unitsOverTime.length > 0 || laborCostOverTime.length > 0;
+  }, [unitsOverTime, laborCostOverTime]);
 
   return (
     <div className="card">
@@ -240,7 +237,7 @@ export default function ProductionTrendsPage() {
               <div className="card-body">
                 <TrendLineChart
                   title="Monthly units produced"
-                  points={charts.unitsOverTime || []} // [{x:'YYYY-MM-01', y:n}]
+                  points={unitsOverTime} // [{x:'YYYY-MM-01', y:n}]
                   label="Units"
                   color="#1b2638"
                   yAxisTitle="Units"
@@ -255,9 +252,9 @@ export default function ProductionTrendsPage() {
               <div className="card-body">
                 <DualLineChart
                   title="Units Produced vs Labor Cost"
-                  pointsA={charts.unitsOverTime || []}
+                  pointsA={unitsOverTime}
                   labelA="Units Produced"
-                  pointsB={charts.laborCostOverTime || []}
+                  pointsB={laborCostOverTime}
                   labelB="Labor Cost"
                   colorA="#1b2638"
                   colorB="#f2994a"

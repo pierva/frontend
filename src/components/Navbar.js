@@ -14,27 +14,27 @@ function Navbar() {
   const navigate = useNavigate();
 
   const checkLoginStatus = () => {
-  const token = localStorage.getItem('token');
-if (!token) {
-    setIsLoggedIn(false);
-    setUserRole('');
-    return;
-  }
-
-  try {
-    const decodedToken = jwtDecode(token);
-    const nowSec = Math.floor(Date.now() / 1000);
-
-    // if no exp or expired => treat as logged out
-    if (!decodedToken?.exp || decodedToken.exp <= nowSec) {
-      localStorage.removeItem('token');
+    const token = localStorage.getItem('token');
+    if (!token) {
       setIsLoggedIn(false);
       setUserRole('');
       return;
     }
 
-    setIsLoggedIn(true);
-    setUserRole(decodedToken.role || '');
+    try {
+      const decodedToken = jwtDecode(token);
+      const nowSec = Math.floor(Date.now() / 1000);
+
+      // if no exp or expired => treat as logged out
+      if (!decodedToken?.exp || decodedToken.exp <= nowSec) {
+        localStorage.removeItem('token');
+        setIsLoggedIn(false);
+        setUserRole('');
+        return;
+      }
+
+      setIsLoggedIn(true);
+      setUserRole(decodedToken.role || '');
     } catch (e) {
       localStorage.removeItem('token');
       setIsLoggedIn(false);
@@ -100,7 +100,7 @@ if (!token) {
         ref={navbarRef}
       >
         <div className="container-fluid">
-          <Link className="navbar-brand d-flex align-items-center" to="/" onClick={closeAll}>
+          <Link className="navbar-brand d-flex align-items-center" to={isLoggedIn ? "/traceability" : "/"} onClick={closeAll}>
             <img
               src={logoUrl}
               alt="Company Logo"

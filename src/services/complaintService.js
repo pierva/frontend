@@ -81,8 +81,7 @@ const deleteComplaint = async (id) => {
   return res.data;
 };
 
-
-export default {
+const complaintService = {
   getCategories,
   createCategory,
   updateCategory,
@@ -96,3 +95,5 @@ export default {
   updateComplaint,
   deleteComplaint
 };
+
+export default complaintService;

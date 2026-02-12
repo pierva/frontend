@@ -40,10 +40,12 @@ const getEnvironmentalSummary = async (filters = {}) => {
   return response.data;
 };
 
-export default {
+const analyticsService = {
   getComplaintsSummary,
   getProductionSummary,
   getWidgetConfig,
   saveWidgetConfig,
-  getEnvironmentalSummary
+  getEnvironmentalSummary,
 };
+
+export default analyticsService;

@@ -158,18 +158,18 @@ export default function ComplaintTrendsPage() {
         display: 'inline-block',
     });
 
-    const COMPLAINTS_PER_10K_THRESHOLDS = {
-        greenMax: 1.0,   // < 1.0 / 10k
-        amberMax: 2.0    // 1.0–2.0 / 10k, >2.0 red
-    };
+    // const COMPLAINTS_PER_10K_THRESHOLDS = {
+    //     greenMax: 1.0,   // < 1.0 / 10k
+    //     amberMax: 2.0    // 1.0–2.0 / 10k, >2.0 red
+    // };
 
-    function getComplaintsPer10kStatus(value) {
-        const v = Number(value);
-        if (!Number.isFinite(v)) return { label: '—', color: '#6c757d' }; // grey
-        if (v < COMPLAINTS_PER_10K_THRESHOLDS.greenMax) return { label: 'Green', color: '#198754' };
-        if (v <= COMPLAINTS_PER_10K_THRESHOLDS.amberMax) return { label: 'Warning', color: '#fd7e14' };
-        return { label: 'Action', color: '#dc3545' };
-    }
+    // function getComplaintsPer10kStatus(value) {
+    //     const v = Number(value);
+    //     if (!Number.isFinite(v)) return { label: '—', color: '#6c757d' }; // grey
+    //     if (v < COMPLAINTS_PER_10K_THRESHOLDS.greenMax) return { label: 'Green', color: '#198754' };
+    //     if (v <= COMPLAINTS_PER_10K_THRESHOLDS.amberMax) return { label: 'Warning', color: '#fd7e14' };
+    //     return { label: 'Action', color: '#dc3545' };
+    // }
 
     useEffect(() => {
         (async () => {
@@ -314,8 +314,8 @@ useEffect(() => {
     ]);
 
     const kpis = widget?.kpis;
-    const complaintsRate = kpis?.complaintsPer10k;
-    const complaintsRateStatus = getComplaintsPer10kStatus(complaintsRate);
+    // const complaintsRate = kpis?.complaintsPer10k;
+    // const complaintsRateStatus = getComplaintsPer10kStatus(complaintsRate);
     const complaintsPer10k = Number(widget?.kpis?.complaintsPer10k ?? 0);
 
     const thresholds = widgetConfig?.thresholds?.complaintsPer10k || { greenMax: 1, amberMax: 2 };

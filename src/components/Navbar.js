@@ -78,6 +78,7 @@ function Navbar() {
       canAddLog: isAdmin || isFactory,
       canManageOrders: isAdmin || isFactory,
       canSubmitOrders: isAdmin || isFactory,
+      canStartProduction: isAdmin || isFactory,
     };
   }, [userRole]);
 
@@ -147,6 +148,14 @@ function Navbar() {
                     <li className="nav-item">
                       <Link className="btn btn-outline-light" to="/factory/orders" onClick={closeAll}>
                         Manage Orders
+                      </Link>
+                    </li>
+                  )}
+
+                  {perms.canStartProduction && (
+                    <li className="nav-item">
+                      <Link className="btn btn-success" to="/ccp/baking/start" onClick={closeAll}>
+                        Start Production
                       </Link>
                     </li>
                   )}

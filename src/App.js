@@ -23,6 +23,7 @@ import ProductionLaborPage from './pages/trends/ProductionLaborPage';
 import EnvironmentalConfigPage from './pages/trends/EnvironmentalConfigPage';
 import EnvironmentalNewATPPage from './pages/trends/EnvironmentalNewATPPage';
 import authService from './services/authService';
+import BakingCcpConfigPage from './pages/ccp/BakingCcpConfigPage';
 
 function App() {
   const isAuthed = authService.isTokenValid();
@@ -124,6 +125,15 @@ function App() {
           element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}>
             <EnvironmentalNewATPPage />
           </ProtectedRoute>} />
+
+        <Route
+          path="/ccp/baking/config"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <BakingCcpConfigPage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Factory and admin can view/fulfill orders */}
         <Route

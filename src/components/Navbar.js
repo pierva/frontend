@@ -184,6 +184,11 @@ function Navbar() {
                         </Link>
                       </li>
                       <li className="nav-item d-lg-none">
+                        <Link className="nav-link" to="/ccp/baking/config" onClick={closeAll}>
+                          Baking CCP Config
+                        </Link>
+                      </li>
+                      <li className="nav-item d-lg-none">
                         <Link className="nav-link" to="/admin/products" onClick={closeAll}>
                           Create Product
                         </Link>
@@ -251,6 +256,9 @@ function Navbar() {
                           <div className="dropdown-divider" />
                           <Link className="dropdown-item" to="/trends" onClick={closeAll}>
                             Trends and Analytics
+                          </Link>
+                          <Link className="dropdown-item" to="/ccp/baking/config" onClick={closeAll}>
+                            Baking CCP Config
                           </Link>
                           <Link className="dropdown-item" to="/admin/products" onClick={closeAll}>
                             Create Product

@@ -14,24 +14,21 @@ const todayISO = () => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-// For <input type="datetime-local"> (local time, no timezone designator)
-const nowLocalDateTime = () => {
+const nowLocalTimeHHMM = () => {
   const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
   const hh = String(d.getHours()).padStart(2, '0');
   const min = String(d.getMinutes()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+  return `${hh}:${min}`;
 };
 
-// Convert datetime-local string -> ISO string
-const localDateTimeToISO = (dtLocalStr) => {
-  // dtLocalStr: "YYYY-MM-DDTHH:mm"
-  if (!dtLocalStr) return null;
-  const d = new Date(dtLocalStr);
-  const iso = d.toISOString();
-  return iso;
+// productionDate: "YYYY-MM-DD", timeHHMM: "HH:mm" -> ISO string
+const combineDateAndTimeToISO = (productionDate, timeHHMM) => {
+  if (!productionDate || !timeHHMM) return null;
+  // Create a local datetime string, then Date() interprets it as local time.
+  const dtLocal = `${productionDate}T${timeHHMM}`;
+  const d = new Date(dtLocal);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
 };
 
 const generatePizzaciniLotCode = () => {
@@ -52,30 +49,30 @@ export default function BakingCcpStartPage() {
   const [notice, setNotice] = useState('');
 
   const [products, setProducts] = useState([]);
-  const [allIngredients, setAllIngredients] = useState([]); // master ingredient list [{id,name}]
+  const [allIngredients, setAllIngredients] = useState([]);
+
   const ingredientById = useMemo(() => {
     const m = new Map();
     (allIngredients || []).forEach(i => m.set(Number(i.id), i));
     return m;
   }, [allIngredients]);
 
-  // Multi-product selection (rows)
+  // Multi-product selection
   const [entries, setEntries] = useState([{ productId: '', productName: '' }]);
-  const [productSuggestions, setProductSuggestions] = useState({}); // { [idx]: Product[] }
+  const [productSuggestions, setProductSuggestions] = useState({});
 
-  // Recipe cache: { [productId]: ingredientId[] }
+  // Cache recipes
   const cachedRecipesRef = useRef({});
 
-  // Ingredient lot codes for THIS start: [{ingredientId, ingredientLotCode}]
-  const [ingredientEntries, setIngredientEntries] = useState([]); // [{ingredientId, ingredientLotCode}]
-
+  // Ingredient lot codes
+  const [ingredientEntries, setIngredientEntries] = useState([]);
   const [confirmMissingLots, setConfirmMissingLots] = useState(false);
 
   const [form, setForm] = useState({
     lotCode: generatePizzaciniLotCode(),
     productionDate: todayISO(),
-    productionStartLocal: nowLocalDateTime(), // editable local start time
-    ovenTempStartF: '', // NOW REQUIRED
+    productionStartTime: nowLocalTimeHHMM(), // TIME ONLY
+    ovenTempStartF: '', // REQUIRED
   });
 
   const fetchInitial = async () => {
@@ -89,11 +86,10 @@ export default function BakingCcpStartPage() {
       ]);
       setProducts(prods || []);
       setAllIngredients(ings || []);
-      // auto-lotcode on load (if blank)
       setForm(f => ({
         ...f,
         lotCode: f.lotCode || generatePizzaciniLotCode(),
-        productionStartLocal: f.productionStartLocal || nowLocalDateTime(),
+        productionStartTime: f.productionStartTime || nowLocalTimeHHMM(),
       }));
     } catch (e) {
       console.error(e);
@@ -108,7 +104,7 @@ export default function BakingCcpStartPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- Product picker (borrowed from AddLog style) ---
+  // Product picker
   const handleProductInputChange = (idx, value) => {
     const clone = [...entries];
     clone[idx].productName = value;
@@ -140,7 +136,7 @@ export default function BakingCcpStartPage() {
   const addEntry = () => setEntries(e => [...e, { productId: '', productName: '' }]);
   const removeEntry = (idx) => setEntries(e => e.filter((_, i) => i !== idx));
 
-  // Prefill ingredient entries based on selected products (dedup ingredient IDs)
+  // Prefill ingredient list from selected products (dedup)
   useEffect(() => {
     const updateIngredientEntries = async () => {
       try {
@@ -194,10 +190,7 @@ export default function BakingCcpStartPage() {
   }, [entries, ingredientById]);
 
   const selectedProductIds = useMemo(() => {
-    return entries
-      .map(e => e.productId)
-      .filter(Boolean)
-      .map(x => Number(x));
+    return entries.map(e => e.productId).filter(Boolean).map(x => Number(x));
   }, [entries]);
 
   const missingLots = useMemo(() => {
@@ -207,42 +200,36 @@ export default function BakingCcpStartPage() {
   const canStart = useMemo(() => {
     if (!form.lotCode || String(form.lotCode).trim() === '') return false;
     if (!form.productionDate) return false;
-    if (!form.productionStartLocal) return false;
-
-    // require at least 1 selected product
+    if (!form.productionStartTime) return false;
     if (!selectedProductIds.length) return false;
 
-    // oven temp REQUIRED
-    const t = form.ovenTempStartF;
-    if (t === '' || t == null) return false;
-    const n = Number(t);
-    return Number.isFinite(n) && n > 0;
-  }, [
-    form.lotCode,
-    form.productionDate,
-    form.productionStartLocal,
-    form.ovenTempStartF,
-    selectedProductIds.length
-  ]);
+    const oven = Number(form.ovenTempStartF);
+    if (!Number.isFinite(oven) || oven <= 0) return false;
+
+    // Validate computed startAt
+    const startISO = combineDateAndTimeToISO(form.productionDate, form.productionStartTime);
+    if (!startISO) return false;
+
+    return true;
+  }, [form.lotCode, form.productionDate, form.productionStartTime, form.ovenTempStartF, selectedProductIds.length]);
 
   const doStart = async () => {
     setStarting(true);
     setError('');
     setNotice('');
     try {
+      const productionStartAt = combineDateAndTimeToISO(form.productionDate, form.productionStartTime);
+      if (!productionStartAt) {
+        setError('Invalid production start time.');
+        return;
+      }
+
       const payload = {
         lotCode: String(form.lotCode).trim(),
         productionDate: form.productionDate || null,
-
-        // NEW: editable start time
-        productionStartAt: localDateTimeToISO(form.productionStartLocal),
-
-        // multiple products
+        productionStartAt,
         productIds: selectedProductIds,
-
-        // REQUIRED oven temp
-        ovenTempStartF: Number(form.ovenTempStartF),
-
+        ovenTempStartF: Number(form.ovenTempStartF), // REQUIRED
         ingredientLots: (ingredientEntries || []).map(x => ({
           ingredientId: Number(x.ingredientId),
           ingredientLotCode: String(x.ingredientLotCode || '').trim() || null,
@@ -277,22 +264,17 @@ export default function BakingCcpStartPage() {
   const handleStart = async () => {
     setError('');
     setNotice('');
-
     if (missingLots.length > 0 && !confirmMissingLots) {
       setConfirmMissingLots(true);
       return;
     }
-
     await doStart();
   };
 
-  const regenerateLotCode = () => {
-    setForm(f => ({ ...f, lotCode: generatePizzaciniLotCode() }));
-  };
+  const regenerateLotCode = () => setForm(f => ({ ...f, lotCode: generatePizzaciniLotCode() }));
 
-  const ingredientName = (ingredientId) => {
-    return ingredientById.get(Number(ingredientId))?.name || `Ingredient #${ingredientId}`;
-  };
+  const ingredientName = (ingredientId) =>
+    ingredientById.get(Number(ingredientId))?.name || `Ingredient #${ingredientId}`;
 
   return (
     <div className="card">
@@ -306,17 +288,9 @@ export default function BakingCcpStartPage() {
           </div>
 
           <div className="d-flex gap-2">
-            <Link className="btn btn-outline-secondary" to="/traceability">
-              Home
-            </Link>
-            <Link className="btn btn-outline-secondary" to="/ccp/baking/config">
-              Config
-            </Link>
-            <button
-              className="btn btn-outline-primary"
-              onClick={fetchInitial}
-              disabled={loading || starting}
-            >
+            <Link className="btn btn-outline-secondary" to="/traceability">Home</Link>
+            <Link className="btn btn-outline-secondary" to="/ccp/baking/config">Config</Link>
+            <button className="btn btn-outline-primary" onClick={fetchInitial} disabled={loading || starting}>
               {loading ? 'Loading…' : 'Refresh'}
             </button>
           </div>
@@ -325,7 +299,6 @@ export default function BakingCcpStartPage() {
         {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
         {notice && <div className="alert alert-success mt-3 mb-0">{notice}</div>}
 
-        {/* Missing lots confirmation banner */}
         {confirmMissingLots && missingLots.length > 0 && (
           <div className="alert alert-warning mt-3 mb-0">
             <div style={{ fontWeight: 800, fontSize: 16 }}>
@@ -344,18 +317,10 @@ export default function BakingCcpStartPage() {
               </ul>
             </div>
             <div className="d-flex gap-2">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setConfirmMissingLots(false)}
-                disabled={starting}
-              >
+              <button className="btn btn-secondary" onClick={() => setConfirmMissingLots(false)} disabled={starting}>
                 Go Back
               </button>
-              <button
-                className="btn btn-warning"
-                onClick={doStart}
-                disabled={starting}
-              >
+              <button className="btn btn-warning" onClick={doStart} disabled={starting}>
                 {starting ? 'Starting…' : 'Start Anyway'}
               </button>
             </div>
@@ -363,7 +328,6 @@ export default function BakingCcpStartPage() {
         )}
 
         <div className="row mt-3 g-3">
-          {/* Lot code + date */}
           <div className="col-12 col-lg-6">
             <label className="form-label mb-1">Lot Code (Auto)</label>
             <div className="input-group">
@@ -371,19 +335,10 @@ export default function BakingCcpStartPage() {
                 className="form-control"
                 value={form.lotCode}
                 onChange={(e) => setForm((f) => ({ ...f, lotCode: e.target.value }))}
-                placeholder="e.g. A-126181"
               />
-              <button
-                type="button"
-                className="btn btn-outline-secondary"
-                onClick={regenerateLotCode}
-                disabled={starting || loading}
-              >
+              <button type="button" className="btn btn-outline-secondary" onClick={regenerateLotCode} disabled={starting || loading}>
                 Regenerate
               </button>
-            </div>
-            <div className="text-muted mt-1" style={{ fontSize: 12 }}>
-              Uses PIZZACINI lot code format. You can edit if needed.
             </div>
           </div>
 
@@ -400,17 +355,16 @@ export default function BakingCcpStartPage() {
           <div className="col-12 col-lg-3">
             <label className="form-label mb-1">Production Start Time</label>
             <input
-              type="datetime-local"
+              type="time"
               className="form-control"
-              value={form.productionStartLocal}
-              onChange={(e) => setForm((f) => ({ ...f, productionStartLocal: e.target.value }))}
+              value={form.productionStartTime}
+              onChange={(e) => setForm((f) => ({ ...f, productionStartTime: e.target.value }))}
             />
             <div className="text-muted mt-1" style={{ fontSize: 12 }}>
               Default is now. Adjust if production started earlier.
             </div>
           </div>
 
-          {/* Products (multi) */}
           <div className="col-12">
             <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
               <div>
@@ -419,12 +373,7 @@ export default function BakingCcpStartPage() {
                   Add multiple products if needed. Ingredients will auto-populate from all selected recipes.
                 </div>
               </div>
-              <button
-                type="button"
-                className="btn btn-outline-secondary"
-                onClick={addEntry}
-                disabled={starting || loading}
-              >
+              <button type="button" className="btn btn-outline-secondary" onClick={addEntry} disabled={starting || loading}>
                 + Add Product
               </button>
             </div>
@@ -442,11 +391,7 @@ export default function BakingCcpStartPage() {
                       placeholder="Type to search product…"
                       style={{ fontSize: 18, fontWeight: 700 }}
                     />
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary"
-                      onClick={() => handleShowAllProducts(idx)}
-                    >
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => handleShowAllProducts(idx)}>
                       ▾
                     </button>
                   </div>
@@ -489,7 +434,6 @@ export default function BakingCcpStartPage() {
             ))}
           </div>
 
-          {/* Oven temp REQUIRED */}
           <div className="col-12 col-lg-6">
             <label className="form-label mb-1">Oven Temperature at Start (°F) — Required</label>
             <input
@@ -501,23 +445,12 @@ export default function BakingCcpStartPage() {
               style={{ fontSize: 18, fontWeight: 700 }}
               required
             />
-            <div className="text-muted mt-1" style={{ fontSize: 12 }}>
-              Required for CCP1 start record.
-            </div>
           </div>
 
-          {/* Ingredient lots */}
           <div className="col-12">
-            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-              <div>
-                <div style={{ fontWeight: 800, fontSize: 16 }}>Ingredient Lot Codes</div>
-                <div className="text-muted" style={{ fontSize: 12 }}>
-                  Auto-built from selected product recipes. Deduped. Minimal typing.
-                </div>
-              </div>
-              <div className="text-muted" style={{ fontSize: 12 }}>
-                {ingredientEntries.length ? `${ingredientEntries.length} ingredients` : 'Select products to load ingredients'}
-              </div>
+            <div style={{ fontWeight: 800, fontSize: 16 }}>Ingredient Lot Codes</div>
+            <div className="text-muted" style={{ fontSize: 12 }}>
+              Auto-built from selected product recipes. Deduped.
             </div>
 
             {ingredientEntries.length > 0 ? (
@@ -536,11 +469,7 @@ export default function BakingCcpStartPage() {
                         <tr key={ing.ingredientId}>
                           <td>
                             <div style={{ fontWeight: 700 }}>{ingredientName(ing.ingredientId)}</div>
-                            {isMissing && (
-                              <div className="text-danger" style={{ fontSize: 12 }}>
-                                Missing
-                              </div>
-                            )}
+                            {isMissing && <div className="text-danger" style={{ fontSize: 12 }}>Missing</div>}
                           </td>
                           <td>
                             <input

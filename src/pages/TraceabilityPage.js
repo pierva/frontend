@@ -130,6 +130,7 @@ export default function TraceabilityPage() {
       setCustomerSuggestions([]);
     }
   };
+  
   const handleSelectCustomer = c => { setCustomer(c.name); setCustomerSuggestions([]); };
   const handleProductEntryChange = (i, f, v) => { const arr = [...productEntries]; arr[i][f] = v; setProductEntries(arr); };
   const handleLotCodeSelect = (i, code) => { handleProductEntryChange(i, 'lotCode', code); setSuggestedLotCodes(prev => ({ ...prev, [i]: [] })); };
@@ -137,32 +138,66 @@ export default function TraceabilityPage() {
   const removeProductEntry = i => setProductEntries(pe => pe.filter((_, idx) => idx !== i));
 
   // Submit form (create or update)
-  const handleSubmit = async e => {
-    e.preventDefault();
-    try {
-      if (isEditing) {
-        const { productId, lotCode, quantity } = productEntries[0];
-        await service.updateLog(editLogId,
-          { date: selectedDate, customer, productId, lotCode, quantity }, token);
-        setMessage('Traceability record updated successfully');
-      } else {
-        await service.createLog(
-          { date: selectedDate, customer, productEntries }, token);
-        setMessage('Traceability record added successfully');
-      }
-      setMessageType('success');
-      // auto-dismiss message after 3s
-      setTimeout(() => setMessage(''), 3000);
+ const handleSubmit = async e => {
+  e.preventDefault();
 
-      setIsEditing(false); setEditLogId(null);
-      setSelectedDate(''); setCustomer('');
-      setProductEntries([{ productId: '', lotCode: '', quantity: '' }]);
-      await fetchPage(1);
-    } catch (err) {
-      console.error('Error saving record', err);
-      setErrorModal({ show: true, message: 'Error saving traceability record. Please try again.' });
+  // Handle submit for both create and update
+  const getErrorMessage = (err) => {
+    const data = err?.response?.data;
+
+    if (typeof data?.message === 'string' && data.message.trim()) return data.message.trim();
+    if (typeof data?.error === 'string' && data.error.trim()) return data.error.trim();
+
+    // If backend sends { errors: ["...","..."] } or { errors: [{message:"..."}] }
+    if (Array.isArray(data?.errors) && data.errors.length) {
+      const first = data.errors[0];
+      if (typeof first === 'string') return first;
+      if (first?.message) return String(first.message);
     }
+
+    // Fallbacks
+    if (typeof err?.message === 'string' && err.message.trim()) return err.message.trim();
+    return 'Error saving traceability record. Please try again.';
   };
+
+  try {
+    if (isEditing) {
+      const { productId, lotCode, quantity } = productEntries[0];
+      await service.updateLog(
+        editLogId,
+        { date: selectedDate, customer, productId, lotCode, quantity },
+        token
+      );
+      setMessage('Traceability record updated successfully');
+    } else {
+      await service.createLog(
+        { date: selectedDate, customer, productEntries },
+        token
+      );
+      setMessage('Traceability record added successfully');
+    }
+
+    setMessageType('success');
+    setTimeout(() => setMessage(''), 3000);
+
+    setIsEditing(false);
+    setEditLogId(null);
+    setSelectedDate('');
+    setCustomer('');
+    setProductEntries([{ productId: '', lotCode: '', quantity: '' }]);
+
+    await fetchPage(1);
+  } catch (err) {
+    console.error('Error saving record', err);
+    const serverMsg = getErrorMessage(err);
+
+    setErrorModal({
+      show: true,
+      message: serverMsg
+    });
+  }
+};
+
   const handleEdit = log => {
     setSelectedDate(log.date.split('T')[0]);
     setCustomer(log.customer);

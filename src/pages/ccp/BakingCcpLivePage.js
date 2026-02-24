@@ -38,6 +38,12 @@ export default function BakingCcpLivePage() {
     setWarnMsg('');
   };
 
+  const productById = useMemo(() => {
+    const m = new Map();
+    (products || []).forEach(p => m.set(Number(p.id), p));
+    return m;
+  }, [products]);
+
   const fetchAll = async ({ silent = false } = {}) => {
     if (!silent) {
       setLoading(true);
@@ -109,8 +115,6 @@ export default function BakingCcpLivePage() {
   const isOverdue = minutesSinceLast != null && minutesSinceLast > maxMinutes;
 
   const cartsOverdueFreezer = useMemo(() => {
-    // A cart should be frozen (blastOutAt) within X minutes of ovenOutAt
-    // We flag carts that have ovenOutAt but no blastOutAt, and are beyond the window.
     const nowMs = Date.now();
     return carts.filter(c => {
       if (!c?.ovenOutAt) return false;
@@ -168,6 +172,16 @@ export default function BakingCcpLivePage() {
     clearBanners();
     setTempF('');
     setTempCartId('');
+
+    // Nice UX: if run has primary product default units and cartUnits is empty, prefill it
+    if (cartUnits === '' && run?.productId) {
+      const p = productById.get(Number(run.productId));
+      const def = p?.defaultUnitsPerCart;
+      if (def != null && def !== '' && Number.isFinite(Number(def))) {
+        setCartUnits(String(Number(def)));
+      }
+    }
+
     setShowTempModal(true);
   };
 
@@ -181,13 +195,6 @@ export default function BakingCcpLivePage() {
 
     setSavingTemp(true);
     try {
-      // TODO: align this to your real endpoint
-      // Expected payload example:
-      // { temperatureF: n, cartId: tempCartId || null }
-      if (typeof bakingCcpService.addTempReading !== 'function') {
-        throw new Error('addTempReading() not implemented in bakingCcpService yet.');
-      }
-
       await bakingCcpService.addTempReading(runId, {
         temperatureF: n,
         cartId: tempCartId ? Number(tempCartId) : null,
@@ -198,7 +205,8 @@ export default function BakingCcpLivePage() {
       fetchAll({ silent: true });
     } catch (e) {
       console.error(e);
-      setError('Failed to record temperature. (Check endpoint + service method)');
+      const msg = e?.response?.data?.message || e?.message || 'Failed to record temperature.';
+      setError(msg);
     } finally {
       setSavingTemp(false);
     }
@@ -206,12 +214,55 @@ export default function BakingCcpLivePage() {
 
   const openCartModal = () => {
     clearBanners();
+
     // Default product = run product if available
-    setCartProductId(run?.productId ? String(run.productId) : '');
-    setCartUnits('');
+    const pid = run?.productId ? String(run.productId) : '';
+    setCartProductId(pid);
+
+    // ✅ Prefill units from product.defaultUnitsPerCart
+    if (pid) {
+      const p = productById.get(Number(pid));
+      const def = p?.defaultUnitsPerCart;
+      if (def != null && def !== '' && Number.isFinite(Number(def))) {
+        setCartUnits(String(Number(def)));
+      } else {
+        setCartUnits('');
+      }
+    } else {
+      setCartUnits('');
+    }
+
     setCartNotes('');
     setShowCartModal(true);
   };
+
+  // ✅ If user changes product in cart modal, update units from that product default
+  useEffect(() => {
+    if (!showCartModal) return;
+    if (!cartProductId) return;
+
+    const p = productById.get(Number(cartProductId));
+    const def = p?.defaultUnitsPerCart;
+
+    if (def != null && def !== '' && Number.isFinite(Number(def))) {
+      setCartUnits(String(Number(def)));
+    } else {
+      setCartUnits('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartProductId, showCartModal]);
+
+  // ✅ If user ties temperature to a cart, prefill units with that cart's units (if present)
+  useEffect(() => {
+    if (!showTempModal) return;
+    if (!tempCartId) return;
+
+    const c = carts.find(x => String(x.id) === String(tempCartId));
+    if (c?.unitsInCart != null && c.unitsInCart !== '' && Number.isFinite(Number(c.unitsInCart))) {
+      setCartUnits(String(Number(c.unitsInCart)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tempCartId, showTempModal]);
 
   const createCart = async () => {
     clearBanners();
@@ -238,7 +289,8 @@ export default function BakingCcpLivePage() {
       fetchAll({ silent: true });
     } catch (e) {
       console.error(e);
-      setError('Failed to create cart.');
+      const msg = e?.response?.data?.message || e?.message || 'Failed to create cart.';
+      setError(msg);
     } finally {
       setSavingCart(false);
     }
@@ -277,6 +329,25 @@ export default function BakingCcpLivePage() {
     }, 3500);
     return () => clearTimeout(t);
   }, [successMsg, warnMsg]);
+
+  const quickTemps = [200, 205, 210, 215, 220];
+  const quickUnits = [30, 40, 60, 80];
+
+  const renderQuickButtons = (values, onPick) => (
+    <div className="d-flex flex-wrap gap-2 mt-2">
+      {values.map(v => (
+        <button
+          key={v}
+          type="button"
+          className="btn btn-outline-secondary"
+          onClick={() => onPick(v)}
+          style={{ fontWeight: 800 }}
+        >
+          {v}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="card">
@@ -514,10 +585,16 @@ export default function BakingCcpLivePage() {
                     className="form-control"
                     value={tempF}
                     onChange={(e) => setTempF(e.target.value)}
-                    placeholder="e.g. 190"
+                    placeholder="e.g. 200"
                     style={{ fontSize: 22, fontWeight: 800, padding: '14px 12px' }}
                     inputMode="numeric"
                   />
+
+                  {/* ✅ Quick temp buttons */}
+                  <div className="text-muted mt-2" style={{ fontSize: 12 }}>
+                    Quick temps
+                  </div>
+                  {renderQuickButtons(quickTemps, (v) => setTempF(String(v)))}
 
                   <div className="mt-3">
                     <label className="form-label mb-1">Tie to cart (optional)</label>
@@ -572,18 +649,24 @@ export default function BakingCcpLivePage() {
                   </select>
 
                   <div className="mt-3">
-                    <label className="form-label mb-1">Units in cart (optional)</label>
+                    <label className="form-label mb-1">Units in cart (auto from product)</label>
                     <input
                       type="number"
                       className="form-control"
                       value={cartUnits}
                       onChange={(e) => setCartUnits(e.target.value)}
-                      placeholder="e.g. 48"
+                      placeholder="e.g. 40"
                       style={{ fontSize: 18, fontWeight: 800, padding: '12px 12px' }}
                       inputMode="numeric"
                     />
+
+                    <div className="text-muted mt-2" style={{ fontSize: 12 }}>
+                      Quick units
+                    </div>
+                    {renderQuickButtons(quickUnits, (v) => setCartUnits(String(v)))}
+                    
                     <div className="text-muted mt-1" style={{ fontSize: 12 }}>
-                      If you don’t know now, leave blank and update later (future enhancement).
+                      Default comes from Product.defaultUnitsPerCart. You can override manually.
                     </div>
                   </div>
 

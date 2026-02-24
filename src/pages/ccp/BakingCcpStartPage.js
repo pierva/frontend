@@ -24,7 +24,6 @@ const nowLocalTimeHHMM = () => {
 // productionDate: "YYYY-MM-DD", timeHHMM: "HH:mm" -> ISO string
 const combineDateAndTimeToISO = (productionDate, timeHHMM) => {
   if (!productionDate || !timeHHMM) return null;
-  // Create a local datetime string, then Date() interprets it as local time.
   const dtLocal = `${productionDate}T${timeHHMM}`;
   const d = new Date(dtLocal);
   if (Number.isNaN(d.getTime())) return null;
@@ -66,14 +65,36 @@ export default function BakingCcpStartPage() {
 
   // Ingredient lot codes
   const [ingredientEntries, setIngredientEntries] = useState([]);
-  const [confirmMissingLots, setConfirmMissingLots] = useState(false);
+
+  // ✅ NEW: modal state for missing lots confirmation
+  const [showMissingLotsModal, setShowMissingLotsModal] = useState(false);
 
   const [form, setForm] = useState({
     lotCode: generatePizzaciniLotCode(),
     productionDate: todayISO(),
-    productionStartTime: nowLocalTimeHHMM(), // TIME ONLY
-    ovenTempStartF: '', // REQUIRED
+    productionStartTime: nowLocalTimeHHMM(),
+    ovenTempStartF: '',
   });
+
+  // ✅ NEW: if active run exists, redirect immediately (no relying on 409)
+  useEffect(() => {
+    let cancelled = false;
+
+    const redirectIfActive = async () => {
+      try {
+        const res = await bakingCcpService.getActiveRun();
+        const run = res?.run || null;
+        if (!cancelled && run?.id) {
+          navigate(`/ccp/baking/live/${run.id}`, { replace: true });
+        }
+      } catch (e) {
+        // silent: if endpoint fails, don't block the start page
+      }
+    };
+
+    redirectIfActive();
+    return () => { cancelled = true; };
+  }, [navigate]);
 
   const fetchInitial = async () => {
     setLoading(true);
@@ -166,19 +187,21 @@ export default function BakingCcpStartPage() {
           (recipe || []).forEach(id => allIngredientIds.add(Number(id)));
         }
 
-        const next = Array.from(allIngredientIds)
-          .filter(Boolean)
-          .sort((a, b) => {
-            const an = ingredientById.get(a)?.name || '';
-            const bn = ingredientById.get(b)?.name || '';
-            return an.localeCompare(bn);
-          })
-          .map(id => {
-            const existing = ingredientEntries.find(x => Number(x.ingredientId) === Number(id));
-            return { ingredientId: id, ingredientLotCode: existing?.ingredientLotCode || '' };
-          });
+        setIngredientEntries(prev => {
+          const next = Array.from(allIngredientIds)
+            .filter(Boolean)
+            .sort((a, b) => {
+              const an = ingredientById.get(a)?.name || '';
+              const bn = ingredientById.get(b)?.name || '';
+              return an.localeCompare(bn);
+            })
+            .map(id => {
+              const existing = prev.find(x => Number(x.ingredientId) === Number(id));
+              return { ingredientId: id, ingredientLotCode: existing?.ingredientLotCode || '' };
+            });
 
-        setIngredientEntries(next);
+          return next;
+        });
       } catch (e) {
         console.error(e);
         setError('Failed to build ingredient list from selected products.');
@@ -206,7 +229,6 @@ export default function BakingCcpStartPage() {
     const oven = Number(form.ovenTempStartF);
     if (!Number.isFinite(oven) || oven <= 0) return false;
 
-    // Validate computed startAt
     const startISO = combineDateAndTimeToISO(form.productionDate, form.productionStartTime);
     if (!startISO) return false;
 
@@ -229,7 +251,7 @@ export default function BakingCcpStartPage() {
         productionDate: form.productionDate || null,
         productionStartAt,
         productIds: selectedProductIds,
-        ovenTempStartF: Number(form.ovenTempStartF), // REQUIRED
+        ovenTempStartF: Number(form.ovenTempStartF),
         ingredientLots: (ingredientEntries || []).map(x => ({
           ingredientId: Number(x.ingredientId),
           ingredientLotCode: String(x.ingredientLotCode || '').trim() || null,
@@ -257,17 +279,19 @@ export default function BakingCcpStartPage() {
       }
     } finally {
       setStarting(false);
-      setConfirmMissingLots(false);
+      setShowMissingLotsModal(false);
     }
   };
 
   const handleStart = async () => {
     setError('');
     setNotice('');
-    if (missingLots.length > 0 && !confirmMissingLots) {
-      setConfirmMissingLots(true);
+
+    if (missingLots.length > 0) {
+      setShowMissingLotsModal(true); // ✅ modal instead of inline banner
       return;
     }
+
     await doStart();
   };
 
@@ -299,32 +323,64 @@ export default function BakingCcpStartPage() {
         {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
         {notice && <div className="alert alert-success mt-3 mb-0">{notice}</div>}
 
-        {confirmMissingLots && missingLots.length > 0 && (
-          <div className="alert alert-warning mt-3 mb-0">
-            <div style={{ fontWeight: 800, fontSize: 16 }}>
-              Ingredient lot codes are missing ({missingLots.length})
+        {/* ✅ Missing lots modal */}
+        {showMissingLotsModal && (
+          <>
+            <div className="modal fade show" style={{ display: 'block' }} tabIndex="-1" role="dialog" aria-modal="true">
+              <div className="modal-dialog modal-lg modal-dialog-centered" role="document">
+                <div className="modal-content">
+                  <div className="modal-header">
+                    <h5 className="modal-title" style={{ fontWeight: 800 }}>
+                      Ingredient lot codes are missing ({missingLots.length})
+                    </h5>
+                    <button
+                      type="button"
+                      className="btn-close"
+                      aria-label="Close"
+                      onClick={() => setShowMissingLotsModal(false)}
+                      disabled={starting}
+                    />
+                  </div>
+
+                  <div className="modal-body">
+                    <div className="alert alert-warning mb-3" style={{ fontSize: 13 }}>
+                      You can start production, but this will be flagged for traceability completion before QA verification.
+                    </div>
+
+                    <div style={{ fontSize: 13 }}>
+                      Missing (showing up to 25):
+                      <ul className="mt-2 mb-0">
+                        {missingLots.slice(0, 25).map((i) => (
+                          <li key={i.ingredientId}>{ingredientName(i.ingredientId)}</li>
+                        ))}
+                        {missingLots.length > 25 && <li>…and {missingLots.length - 25} more</li>}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="modal-footer">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setShowMissingLotsModal(false)}
+                      disabled={starting}
+                    >
+                      Go Back
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-warning"
+                      onClick={doStart}
+                      disabled={starting}
+                    >
+                      {starting ? 'Starting…' : 'Start Anyway'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="mt-1" style={{ fontSize: 13 }}>
-              You can start production, but this will be flagged for traceability completion before QA verification.
-            </div>
-            <div className="mt-2" style={{ fontSize: 13 }}>
-              Missing:
-              <ul className="mb-2">
-                {missingLots.slice(0, 8).map((i) => (
-                  <li key={i.ingredientId}>{ingredientName(i.ingredientId)}</li>
-                ))}
-                {missingLots.length > 8 && <li>…and {missingLots.length - 8} more</li>}
-              </ul>
-            </div>
-            <div className="d-flex gap-2">
-              <button className="btn btn-secondary" onClick={() => setConfirmMissingLots(false)} disabled={starting}>
-                Go Back
-              </button>
-              <button className="btn btn-warning" onClick={doStart} disabled={starting}>
-                {starting ? 'Starting…' : 'Start Anyway'}
-              </button>
-            </div>
-          </div>
+            <div className="modal-backdrop fade show" />
+          </>
         )}
 
         <div className="row mt-3 g-3">
@@ -507,7 +563,7 @@ export default function BakingCcpStartPage() {
               className="btn btn-success btn-lg w-100"
               style={{ fontSize: 22, fontWeight: 800, padding: '14px 16px' }}
               onClick={handleStart}
-              disabled={!canStart || starting || loading || (confirmMissingLots && missingLots.length > 0)}
+              disabled={!canStart || starting || loading}
             >
               {starting ? 'Starting…' : 'START PRODUCTION'}
             </button>

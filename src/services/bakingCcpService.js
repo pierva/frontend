@@ -41,8 +41,7 @@ const getBatches = async () => {
 // RUNS
 // --------------------
 const startRun = async (payload) => {
-  // NEW expected payload:
-  // { lotCode, productionDate?, productId?, productionStartAt?, ovenTempStartF? }
+  // NEW expected payload: { batchId, productionDate, notes? }
   const res = await axios.post(`${API_URL}/api/analytics/bakingccp/runs/start`, payload, {
     headers: authHeaders(),
   });
@@ -109,6 +108,21 @@ const verifyRun = async (runId) => {
 };
 
 // --------------------
+// TEMPERATURE READINGS
+// --------------------
+// payload: { temperatureF, cartId?, takenAt? }
+const addTempReading = async (runId, payload) => {
+  console.log(payload);
+  
+  const res = await axios.post(
+    `${API_URL}/api/analytics/bakingccp/runs/${runId}/temps`,
+    payload,
+    { headers: authHeaders() }
+  );
+  return res.data;
+};
+
+// --------------------
 // CARTS (baking creates; packaging processes)
 // --------------------
 
@@ -155,6 +169,7 @@ const bakingCcpService = {
   stopBaking,
   completeRun,
   verifyRun,
+  addTempReading,
 
   // carts
   createCart,

@@ -2,12 +2,17 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 import logo from '../media/Pizzacini/logo_text.png';
+import bakingCcpService from '../services/bakingCcpService'; 
 
 function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);   // bootstrap collapse (mobile)
   const [isMenuOpen, setIsMenuOpen] = useState(false);   // desktop dropdown (lg+)
+
+  // active run state
+  const [activeRunId, setActiveRunId] = useState(null);
+  const [checkingActiveRun, setCheckingActiveRun] = useState(false);
 
   const navbarRef = useRef();
   const location = useLocation();
@@ -64,6 +69,7 @@ function Navbar() {
     localStorage.removeItem('token');
     setIsLoggedIn(false);
     setUserRole('');
+    setActiveRunId(null); 
     navigate('/', { replace: true });
   };
 
@@ -86,6 +92,37 @@ function Navbar() {
     setIsExpanded(false);
     setIsMenuOpen(false);
   };
+
+  // resolve active run (used by navbar button)
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchActiveRun = async () => {
+      // Only check if logged in + allowed
+      if (!isLoggedIn || !perms.canStartProduction) {
+        setActiveRunId(null);
+        return;
+      }
+
+      setCheckingActiveRun(true);
+      try {
+        const res = await bakingCcpService.getActiveRun();
+        const run = res?.run || null;
+        if (!cancelled) setActiveRunId(run?.id ?? null);
+      } catch (e) {
+        // Silent fail: don’t spam user; just assume no active run
+        if (!cancelled) setActiveRunId(null);
+      } finally {
+        if (!cancelled) setCheckingActiveRun(false);
+      }
+    };
+
+    fetchActiveRun();
+    return () => { cancelled = true; };
+  }, [isLoggedIn, perms.canStartProduction, location.pathname]);
+
+  // Centralize paths so you can adjust easily
+  const LIVE_RUN_PATH = activeRunId ? `/ccp/baking/live/${activeRunId}` : '/ccp/baking/start';
 
   return (
     <>
@@ -154,8 +191,27 @@ function Navbar() {
 
                   {perms.canStartProduction && (
                     <li className="nav-item">
-                      <Link className="btn btn-success" to="/ccp/baking/start" onClick={closeAll}>
-                        Start Production
+                      <Link
+                        className={`btn ${activeRunId ? 'btn-danger' : 'btn-success'}`}
+                        to={LIVE_RUN_PATH}
+                        onClick={closeAll}
+                        title={activeRunId ? `Open live run #${activeRunId}` : 'Start a new production run'}
+                      >
+                        {activeRunId ? (
+                          <>
+                            Production in Progress{' '}
+                            <span className="badge bg-light text-dark ms-2">
+                              RUN #{activeRunId}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            Start Production
+                            {checkingActiveRun && (
+                              <span className="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>
+                            )}
+                          </>
+                        )}
                       </Link>
                     </li>
                   )}

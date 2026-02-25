@@ -76,6 +76,17 @@ export default function BakingCcpStartPage() {
     ovenTempStartF: '',
   });
 
+  // Existing-lot modal
+  const [showExistingLotModal, setShowExistingLotModal] = useState(false);
+  const [existingLotInfo, setExistingLotInfo] = useState({
+    message: '',
+    runId: null,
+    runStatus: '',
+    lotCode: '',
+  });
+
+  const isRunInProgress = (status) => ['BAKING', 'BAKING_PAUSED'].includes(String(status || ''));
+
   // ✅ NEW: if active run exists, redirect immediately (no relying on 409)
   useEffect(() => {
     let cancelled = false;
@@ -270,13 +281,36 @@ export default function BakingCcpStartPage() {
       navigate(`/ccp/baking/live/${runId}`, { replace: true });
     } catch (e) {
       console.error(e);
-      const msg = e?.response?.data?.message || 'Failed to start production run.';
-      setError(msg);
 
+      const apiMsg = e?.response?.data?.message || '';
       const existingRunId = e?.response?.data?.runId;
+
+      // If server tells us there is an existing run, show modal instead of redirect
       if (existingRunId) {
-        navigate(`/ccp/baking/live/${existingRunId}`, { replace: true });
+        let runStatus = '';
+        try {
+          const runRes = await bakingCcpService.getRun(existingRunId);
+          runStatus = runRes?.run?.status || '';
+        } catch (err2) {
+          console.error('Failed to fetch existing run status', err2);
+        }
+
+        setExistingLotInfo({
+          message: apiMsg || 'This lot code has already been used.',
+          runId: existingRunId,
+          runStatus,
+          lotCode: String(form.lotCode || '').trim(),
+        });
+        setShowExistingLotModal(true);
+
+        // optional: keep page error empty when modal is shown
+        setError('');
+        return;
       }
+
+      // Fallback: show error normally
+      const msg = apiMsg || 'Failed to start production run.';
+      setError(msg);
     } finally {
       setStarting(false);
       setShowMissingLotsModal(false);
@@ -570,6 +604,83 @@ export default function BakingCcpStartPage() {
           </div>
         </div>
       </div>
+
+          {/* EXISTING LOT MODAL */}
+    {showExistingLotModal && (
+      <div className="modal d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.45)' }}>
+        <div className="modal-dialog modal-dialog-centered" role="document">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h5 className="modal-title">Lot code already used</h5>
+              <button
+                type="button"
+                className="btn-close"
+                onClick={() => setShowExistingLotModal(false)}
+              />
+            </div>
+
+            <div className="modal-body">
+              <div className="alert alert-warning mb-2" style={{ fontWeight: 800 }}>
+                {existingLotInfo.message || 'This lot code has already been used.'}
+              </div>
+
+              <div className="text-muted" style={{ fontSize: 13 }}>
+                Lot: <span style={{ fontWeight: 900 }}>{existingLotInfo.lotCode || '—'}</span>
+              </div>
+              <div className="text-muted" style={{ fontSize: 13 }}>
+                Run ID: <span style={{ fontWeight: 900 }}>{existingLotInfo.runId || '—'}</span>
+              </div>
+              <div className="text-muted" style={{ fontSize: 13 }}>
+                Status: <span style={{ fontWeight: 900 }}>{existingLotInfo.runStatus || 'Unknown'}</span>
+              </div>
+
+              <div className="mt-3" style={{ fontSize: 13 }}>
+                {isRunInProgress(existingLotInfo.runStatus)
+                  ? 'Production is still in progress. You can open the live run.'
+                  : 'Production is not in progress. You should open the SQF report for this run (coming next).'}
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                className="btn btn-outline-secondary"
+                onClick={() => setShowExistingLotModal(false)}
+              >
+                Close
+              </button>
+
+              {isRunInProgress(existingLotInfo.runStatus) ? (
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    const rid = existingLotInfo.runId;
+                    setShowExistingLotModal(false);
+                    if (rid) navigate(`/ccp/baking/live/${rid}`);
+                  }}
+                  disabled={!existingLotInfo.runId}
+                >
+                  Go to Live Production
+                </button>
+              ) : (
+                <button
+                  className="btn btn-success"
+                  onClick={() => {
+                    // Placeholder until SQF report page exists
+                    // Later: navigate(`/ccp/baking/report/${existingLotInfo.runId}`)
+                    setShowExistingLotModal(false);
+                    setNotice('SQF report page coming next (not implemented yet).');
+                  }}
+                  disabled={!existingLotInfo.runId}
+                >
+                  Open SQF Report
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    
     </div>
   );
 }

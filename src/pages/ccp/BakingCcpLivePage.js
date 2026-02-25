@@ -32,6 +32,16 @@ export default function BakingCcpLivePage() {
   const [cartNotes, setCartNotes] = useState('');
   const [savingCart, setSavingCart] = useState(false);
 
+  const runStatus = run?.status || '';
+
+  const canPause = runStatus === 'BAKING';
+  const canResume = runStatus === 'BAKING_PAUSED';
+  const canStopBaking = ['BAKING', 'BAKING_PAUSED'].includes(runStatus);
+
+  // ✅ Baking actions allowed only while baking is active/paused
+  const canBakingActions = ['BAKING'].includes(runStatus);
+
+
   const clearBanners = () => {
     setError('');
     setSuccessMsg('');
@@ -43,6 +53,15 @@ export default function BakingCcpLivePage() {
     (products || []).forEach(p => m.set(Number(p.id), p));
     return m;
   }, [products]);
+
+  const selectedProductDefaultUnits = useMemo(() => {
+    if (!cartProductId) return null;
+    const p = productById.get(Number(cartProductId));
+    const def = p?.defaultUnitsPerCart;
+    const n = def == null || def === '' ? null : Number(def);
+    return Number.isFinite(n) ? n : null;
+  }, [cartProductId, productById]);
+
 
   const fetchAll = async ({ silent = false } = {}) => {
     if (!silent) {
@@ -158,18 +177,32 @@ export default function BakingCcpLivePage() {
 
   const doStopBaking = async () => {
     clearBanners();
+
+    // extra guard (button should be disabled anyway)
+    if (!['BAKING', 'BAKING_PAUSED'].includes(run?.status)) {
+      setWarnMsg('Baking is already stopped (or run is not in a stoppable state).');
+      return;
+    }
     try {
       await bakingCcpService.stopBaking(runId);
       setWarnMsg('Baking stopped. Packaging can continue with freezer events and completion.');
       fetchAll({ silent: true });
     } catch (e) {
       console.error(e);
-      setError('Failed to stop baking (endpoint missing or server error).');
+      const msg =
+        e?.response?.data?.message ||
+        e?.message ||
+        'Failed to stop baking.';
+      setError(msg);
     }
   };
 
   const openTempModal = () => {
     clearBanners();
+    if (!['BAKING'].includes(run?.status)) {
+      setWarnMsg('Baking is stopped. Temperature readings are disabled.');
+      return;
+    }
     setTempF('');
     setTempCartId('');
 
@@ -214,7 +247,10 @@ export default function BakingCcpLivePage() {
 
   const openCartModal = () => {
     clearBanners();
-
+    if (!['BAKING'].includes(run?.status)) {
+      setWarnMsg('Baking is stopped. Creating new carts is disabled.');
+      return;
+    }
     // Default product = run product if available
     const pid = run?.productId ? String(run.productId) : '';
     setCartProductId(pid);
@@ -333,19 +369,26 @@ export default function BakingCcpLivePage() {
   const quickTemps = [200, 205, 210, 215, 220];
   const quickUnits = [30, 40, 60, 80];
 
-  const renderQuickButtons = (values, onPick) => (
+  const renderQuickButtons = (values, onPick, { activeValue = null } = {}) => (
     <div className="d-flex flex-wrap gap-2 mt-2">
-      {values.map(v => (
-        <button
-          key={v}
-          type="button"
-          className="btn btn-outline-secondary"
-          onClick={() => onPick(v)}
-          style={{ fontWeight: 800 }}
-        >
-          {v}
-        </button>
-      ))}
+      {values.map(v => {
+        const isActive =
+          activeValue != null &&
+          Number.isFinite(Number(activeValue)) &&
+          Number(activeValue) === Number(v);
+
+        return (
+          <button
+            key={v}
+            type="button"
+            className={`btn ${isActive ? 'btn-secondary' : 'btn-outline-secondary'}`}
+            onClick={() => onPick(v)}
+            style={{ fontWeight: 800 }}
+          >
+            {v}
+          </button>
+        );
+      })}
     </div>
   );
 
@@ -396,16 +439,34 @@ export default function BakingCcpLivePage() {
                     </div>
 
                     <div className="mt-3 d-flex flex-wrap gap-2">
-                      <button className="btn btn-outline-secondary" onClick={doPause}>
+                      <button
+                        className="btn btn-outline-secondary"
+                        onClick={doPause}
+                        disabled={!canPause}
+                        title={!canPause ? `Cannot pause when status is ${runStatus || '—'}` : 'Pause'}
+                      >
                         Pause
                       </button>
-                      <button className="btn btn-outline-secondary" onClick={doResume}>
+
+                      <button
+                        className="btn btn-outline-secondary"
+                        onClick={doResume}
+                        disabled={!canResume}
+                        title={!canResume ? `Cannot resume when status is ${runStatus || '—'}` : 'Resume'}
+                      >
                         Resume
                       </button>
-                      <button className="btn btn-outline-danger" onClick={doStopBaking}>
+
+                      <button
+                        className="btn btn-outline-danger"
+                        onClick={doStopBaking}
+                        disabled={!canStopBaking}
+                        title={!canStopBaking ? `Nothing to stop (status is ${runStatus || '—'})` : 'Stop Baking'}
+                      >
                         Stop Baking
                       </button>
                     </div>
+
 
                     <div className="text-muted mt-2" style={{ fontSize: 12 }}>
                       “Stop Baking” ends CCP1 activity; packaging (CCP2) continues.
@@ -451,6 +512,8 @@ export default function BakingCcpLivePage() {
                     className="btn btn-primary btn-lg flex-fill"
                     style={{ fontSize: 22, fontWeight: 900, padding: '14px 16px' }}
                     onClick={openTempModal}
+                    disabled={!canBakingActions}
+                    title={!canBakingActions ? `Cannot record temps when status is ${runStatus || '—'}` : 'Record Temperature'}
                   >
                     RECORD TEMPERATURE
                   </button>
@@ -459,6 +522,8 @@ export default function BakingCcpLivePage() {
                     className="btn btn-outline-secondary btn-lg flex-fill"
                     style={{ fontSize: 22, fontWeight: 900, padding: '14px 16px' }}
                     onClick={openCartModal}
+                    disabled={!canBakingActions}
+                    title={!canBakingActions ? `Cannot create carts when status is ${runStatus || '—'}` : 'New Cart'}
                   >
                     NEW CART
                   </button>
@@ -663,10 +728,17 @@ export default function BakingCcpLivePage() {
                     <div className="text-muted mt-2" style={{ fontSize: 12 }}>
                       Quick units
                     </div>
-                    {renderQuickButtons(quickUnits, (v) => setCartUnits(String(v)))}
-                    
+                    {renderQuickButtons(
+                      quickUnits,
+                      (v) => setCartUnits(String(v)),
+                      {
+                        // highlight current units if set; otherwise highlight product default
+                        activeValue: cartUnits !== '' ? cartUnits : selectedProductDefaultUnits,
+                      }
+                    )}
+
                     <div className="text-muted mt-1" style={{ fontSize: 12 }}>
-                      Default comes from Product.defaultUnitsPerCart. You can override manually.
+                      Set default units per cart in product config, or use quick buttons above.
                     </div>
                   </div>
 

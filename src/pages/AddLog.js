@@ -18,7 +18,7 @@ function AddLog() {
   ]);
   const [productSuggestions, setProductSuggestions] = useState({});
   const [ingredientEntries, setIngredientEntries] = useState([
-    { ingredientId: '', ingredientLotCode: '' }
+    { ingredientId: '', ingredientLotCode: '', quantity: '', uom: 'lb' }
   ]);
 
   // Cache product recipes so we only fetch once per product
@@ -63,7 +63,9 @@ function AddLog() {
       }
       const newIng = Array.from(allIngredientIds).map(id => ({
         ingredientId: id,
-        ingredientLotCode: ''
+        ingredientLotCode: '',
+        quantity: '',
+        uom: 'lb', // default for US operators
       }));
       setIngredientEntries(newIng);
     };
@@ -81,6 +83,14 @@ function AddLog() {
 
   const autoDismissMessage = () => {
     setTimeout(() => setMessage(''), 3000);
+  };
+
+  const toKg = (qty, uom) => {
+    const n = Number(qty);
+    if (!Number.isFinite(n)) return null;
+    if (uom === 'kg') return n;
+    if (uom === 'lb') return n * 0.45359237;
+    return null;
   };
 
   // --- Product‐picker handlers ---
@@ -132,45 +142,73 @@ function AddLog() {
   const removeIngredientEntry = idx =>
     setIngredientEntries(i => i.filter((_, i2) => i2 !== idx));
 
-  const handleSubmit = async e => {
-    e.preventDefault();
+const handleSubmit = async e => {
+  e.preventDefault();
 
-    if (!productionDate) {
-      setMessage('Please select a production date.');
-      return autoDismissMessage();
-    }
+  if (!productionDate) {
+    setMessage('Please select a production date.');
+    return autoDismissMessage();
+  }
 
-    if (entries.some(en => !en.productId || !en.quantity)) {
-      setMessage('Please fill out all product fields.');
-      return autoDismissMessage();
-    }
-    if (
-      ingredientEntries.some(en => !en.ingredientId || !en.ingredientLotCode)
-    ) {
-      setMessage('Please fill out all ingredient fields.');
-      return autoDismissMessage();
-    }
+  if (entries.some(en => !en.productId || !en.quantity)) {
+    setMessage('Please fill out all product fields.');
+    return autoDismissMessage();
+  }
 
-    try {
-      await logService.addBatchLogs({
-        entries: entries.map(en => ({ ...en, lotCode })), // backend uses batchId & lotCode from batch
-        ingredientEntries,
-        lotCode,
-        production_date: productionDate, // <<< important: matches backend destructuring
-      });
-      setMessage('Production batch submitted successfully.');
-      autoDismissMessage();
-      setEntries([{ productId: '', productName: '', quantity: '' }]);
-      setIngredientEntries([{ ingredientId: '', ingredientLotCode: '' }]);
-      setLotCode(generatePizzaciniLotCode());
-      const today = new Date();
-      setProductionDate(today.toISOString().slice(0, 10));
-    } catch (err) {
-      console.error(err);
-      setMessage('Error submitting batch logs.');
-      autoDismissMessage();
-    }
-  };
+  if (
+    ingredientEntries.some(en =>
+      !en.ingredientId ||
+      !en.ingredientLotCode ||
+      en.quantity === '' ||
+      !Number.isFinite(Number(en.quantity)) ||
+      Number(en.quantity) <= 0
+    )
+  ) {
+    setMessage('Please fill out all ingredient fields (including quantity).');
+    return autoDismissMessage();
+  }
+
+  try {
+    const ingredientPayload = ingredientEntries.map(en => {
+      const uom = (en.uom || 'lb').toLowerCase();
+      const qKg = toKg(en.quantity, uom);
+
+      if (!Number.isFinite(qKg) || qKg <= 0) {
+        throw new Error('Invalid ingredient quantity/unit. Please check quantities and units.');
+      }
+
+      return {
+        ingredientId: Number(en.ingredientId),
+        ingredientLotCode: String(en.ingredientLotCode || '').trim(),
+        quantityKg: qKg,                    // canonical
+        quantityInput: Number(en.quantity), // audit
+        uomInput: uom,                      // audit
+      };
+    });
+
+    await logService.addBatchLogs({
+      entries: entries.map(en => ({ ...en, lotCode })),
+      ingredientEntries: ingredientPayload,
+      lotCode,
+      production_date: productionDate,
+    });
+
+    setMessage('Production batch submitted successfully.');
+    autoDismissMessage();
+
+    setEntries([{ productId: '', productName: '', quantity: '' }]);
+    setIngredientEntries([{ ingredientId: '', ingredientLotCode: '', quantity: '', uom: 'lb' }]);
+    setLotCode(generatePizzaciniLotCode());
+
+    const today = new Date();
+    setProductionDate(today.toISOString().slice(0, 10));
+  } catch (err) {
+    console.error(err);
+    const msg = err?.message || 'Error submitting batch logs.';
+    setMessage(msg);
+    autoDismissMessage();
+  }
+};
 
   return (
     <div className="container mt-5">
@@ -297,41 +335,58 @@ function AddLog() {
         <h4>Ingredients</h4>
         {ingredientEntries.map((ingredient, idx) => (
           <div key={idx} className="row mb-3 g-1">
-            <div className="col-md-5 col-12">
+            <div className="col-md-4 col-12">
               <label>Ingredient</label>
               <select
                 className="form-control"
                 value={ingredient.ingredientId}
-                onChange={e =>
-                  handleIngredientChange(idx, 'ingredientId', e.target.value)
-                }
+                onChange={e => handleIngredientChange(idx, 'ingredientId', e.target.value)}
                 required
               >
                 <option value="">Select an ingredient</option>
                 {ingredients.map(ing => (
-                  <option key={ing.id} value={ing.id}>
-                    {ing.name}
-                  </option>
+                  <option key={ing.id} value={ing.id}>{ing.name}</option>
                 ))}
               </select>
             </div>
-            <div className="col-md-5 col-12">
+
+            <div className="col-md-3 col-12">
               <label>Lot Code</label>
               <input
                 type="text"
                 className="form-control"
                 value={ingredient.ingredientLotCode}
-                onChange={e =>
-                  handleIngredientChange(
-                    idx,
-                    'ingredientLotCode',
-                    e.target.value
-                  )
-                }
+                onChange={e => handleIngredientChange(idx, 'ingredientLotCode', e.target.value)}
                 required
               />
             </div>
-            <div className="col-md-2 col-12 d-flex align-items-end">
+
+            <div className="col-md-3 col-12">
+              <label>Quantity</label>
+              <input
+                type="number"
+                className="form-control"
+                value={ingredient.quantity}
+                onChange={e => handleIngredientChange(idx, 'quantity', e.target.value)}
+                min="0"
+                step="0.01"
+                required
+              />
+            </div>
+
+            <div className="col-md-1 col-6">
+              <label>Unit</label>
+              <select
+                className="form-control"
+                value={ingredient.uom}
+                onChange={e => handleIngredientChange(idx, 'uom', e.target.value)}
+              >
+                <option value="lb">lb</option>
+                <option value="kg">kg</option>
+              </select>
+            </div>
+
+            <div className="col-md-1 col-6 d-flex align-items-end">
               <button
                 type="button"
                 className="btn btn-danger w-100"

@@ -111,10 +111,9 @@ export default function BakingCcpLivePage() {
   }, [runId]);
 
   useEffect(() => {
-    if (mode !== 'packaging') return;
     const t = setInterval(() => setTick(x => x + 1), 60000);
     return () => clearInterval(t);
-  }, [mode]);
+  }, []);
 
   const runStatus = run?.status || '';
   const isBaking = runStatus === 'BAKING';
@@ -150,7 +149,14 @@ export default function BakingCcpLivePage() {
     return Math.floor((Date.now() - lastTempAt.getTime()) / 60000);
   }, [lastTempAt]);
 
-  const isOverdue = minutesSinceLast != null && minutesSinceLast > maxMinutes;
+  const isOverdue = isBaking && minutesSinceLast != null && minutesSinceLast >= maxMinutes;
+  const minsUntilNextTemp = useMemo(() => {
+    if (!isBaking) return null;
+    if (minutesSinceLast == null) return maxMinutes; // no readings yet, full interval available
+    return maxMinutes - minutesSinceLast;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBaking, minutesSinceLast, maxMinutes, tick]);
+  const isApproaching = minsUntilNextTemp != null && minsUntilNextTemp <= 5 && minsUntilNextTemp > 0;
 
   const cartsOverdueFreezer = useMemo(() => {
     const nowMs = Date.now();
@@ -542,6 +548,13 @@ export default function BakingCcpLivePage() {
   const disableBakingControlsInPackaging = mode === 'packaging';
 
   return (
+    <>
+    <style>{`
+      @keyframes borderFlash {
+        0%, 100% { box-shadow: 0 0 0 2px transparent; }
+        50% { box-shadow: 0 0 0 3px #fd7e14; }
+      }
+    `}</style>
     <div className="card">
       <div className="card-body">
         <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -644,25 +657,52 @@ export default function BakingCcpLivePage() {
               {/* Right card */}
               {mode === 'baking' ? (
                 <div className="col-12 col-lg-6">
-                  <div className="card">
+                  <div
+                    className="card"
+                    style={isApproaching || isOverdue ? {
+                      animation: 'borderFlash 1.2s ease-in-out infinite',
+                    } : {}}
+                  >
                     <div className="card-body">
-                      <div className="text-muted">Temperature interval rule</div>
-                      <div style={{ fontSize: 22, fontWeight: 800 }}>
-                        Max {maxMinutes} min between readings
+                      <div className="text-muted" style={{ fontSize: 12 }}>
+                        Temperature interval: {maxMinutes} min between readings
                       </div>
-                      <div className="mt-2">
-                        <div className="text-muted" style={{ fontSize: 12 }}>Last reading:</div>
-                        <div style={{ fontSize: 18, fontWeight: 700 }}>
-                          {lastTempAt ? lastTempAt.toLocaleString() : 'No readings yet'}
+
+                      {!isBaking ? (
+                        <div className="mt-2 text-muted" style={{ fontSize: 14 }}>
+                          Temperature monitoring is active only while baking.
                         </div>
-                        <div className="text-muted" style={{ fontSize: 12 }}>
-                          Minutes since last: {minutesSinceLast == null ? '—' : minutesSinceLast}
-                        </div>
-                      </div>
-                      {isOverdue && (
-                        <div className="alert alert-danger mt-3 mb-0" style={{ fontWeight: 800 }}>
-                          TEMP OVERDUE — record a temperature now.
-                        </div>
+                      ) : (
+                        <>
+                          <div className="mt-2 d-flex align-items-baseline gap-2">
+                            <div style={{ fontSize: 13, color: '#6c757d' }}>Next reading in</div>
+                          </div>
+                          <div style={{
+                            fontSize: 48,
+                            fontWeight: 900,
+                            lineHeight: 1,
+                            color: isOverdue ? '#dc3545' : isApproaching ? '#fd7e14' : '#212529'
+                          }}>
+                            {isOverdue
+                              ? `+${Math.abs(minsUntilNextTemp)} min`
+                              : minsUntilNextTemp != null
+                                ? `${minsUntilNextTemp} min`
+                                : '—'}
+                          </div>
+                          <div className="text-muted mt-1" style={{ fontSize: 12 }}>
+                            Last reading: {lastTempAt ? lastTempAt.toLocaleString() : 'No readings yet'}
+                          </div>
+                          {isOverdue && (
+                            <div className="alert alert-danger mt-3 mb-0" style={{ fontWeight: 800 }}>
+                              TEMP OVERDUE — record a temperature now.
+                            </div>
+                          )}
+                          {isApproaching && !isOverdue && (
+                            <div className="alert alert-warning mt-3 mb-0" style={{ fontWeight: 800 }}>
+                              Next temperature reading due soon.
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -777,8 +817,6 @@ export default function BakingCcpLivePage() {
                       Requirement: run status must be <b>BAKING_STOPPED</b>.
                     </div>
                   )}
-
-               
                 </div>
               )}
 
@@ -1420,5 +1458,6 @@ export default function BakingCcpLivePage() {
 
       </div>
     </div>
+    </>
   );
 }

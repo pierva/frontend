@@ -133,7 +133,7 @@ export default function BakingCcpConfigPage() {
 
           <div className="d-flex gap-2">
             <Link className="btn btn-outline-secondary" to="/ccp/baking/start">
-              Back to Start Run
+              Back
             </Link>
             <button className="btn btn-outline-primary" onClick={fetchConfig} disabled={loading || saving}>
               {loading ? 'Loading…' : 'Refresh'}

@@ -113,15 +113,27 @@ ALTER TABLE IngredientLotCodes
 
 ```
 ALTER TABLE IngredientLotCodes
-  ADD COLUMN quantityUsed DECIMAL(10,3) NULL;
+  ADD COLUMN quantityKg DECIMAL(10,3) NULL AFTER ingredientLotCode,
+  ADD COLUMN quantityInput DECIMAL(10,3) NULL AFTER quantityKg,
+  ADD COLUMN uomInput ENUM('kg','lb') NULL AFTER quantityInput;
 ```
 
 Convert status to ENTERED for all the rows containing values. Yoy may get the SAFE updates warning, so disable it for this instance with SET SQL_SAFE_UPDATES = 0;, then put it back on with SET SQL_SAFE_UPDATES = 1;
 ```
 UPDATE IngredientLotCodes
-SET status = 'ENTERED'
-WHERE status = 'MISSING'
-  AND ingredientLotCode IS NOT NULL
-  AND TRIM(ingredientLotCode) <> '';
+SET status = 'EXCLUDED'
+WHERE status IS NULL
+  AND (quantityKg IS NULL OR quantityKg <= 0);
 
+```
+
+Add check constraint so no zero quantity can be entered for status = ENTERED
+
+```
+ALTER TABLE IngredientLotCodes
+  ADD CONSTRAINT chk_qty_required_when_entered
+  CHECK (
+    status <> 'ENTERED'
+    OR (quantityKg IS NOT NULL AND quantityKg > 0)
+  );
 ```

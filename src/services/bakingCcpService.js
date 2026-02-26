@@ -112,8 +112,6 @@ const verifyRun = async (runId) => {
 // --------------------
 // payload: { temperatureF, cartId?, takenAt? }
 const addTempReading = async (runId, payload) => {
-  console.log(payload);
-  
   const res = await axios.post(
     `${API_URL}/api/analytics/bakingccp/runs/${runId}/temps`,
     payload,

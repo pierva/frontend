@@ -28,7 +28,6 @@ const saveConfig = async (config) => {
 
 // --------------------
 // REFERENCE DATA
-// (legacy - you can keep it even if you move to lotCode-first)
 // --------------------
 const getBatches = async () => {
   const res = await axios.get(`${API_URL}/api/analytics/bakingccp/batches`, {
@@ -41,7 +40,6 @@ const getBatches = async () => {
 // RUNS
 // --------------------
 const startRun = async (payload) => {
-  // NEW expected payload: { batchId, productionDate, notes? }
   const res = await axios.post(`${API_URL}/api/analytics/bakingccp/runs/start`, payload, {
     headers: authHeaders(),
   });
@@ -55,6 +53,15 @@ const getActiveRun = async () => {
   return res.data;
 };
 
+// ✅ QA review queue — fetch runs by status (default: COMPLETED)
+const getRuns = async (status = 'COMPLETED') => {
+  const res = await axios.get(`${API_URL}/api/analytics/bakingccp/runs`, {
+    headers: authHeaders(),
+    params: { status },
+  });
+  return res.data;
+};
+
 const getRun = async (runId) => {
   const res = await axios.get(`${API_URL}/api/analytics/bakingccp/runs/${runId}`, {
     headers: authHeaders(),
@@ -62,7 +69,6 @@ const getRun = async (runId) => {
   return res.data;
 };
 
-// Live payload for iPad (run + carts + last temp + alerts meta)
 const getRunLive = async (runId) => {
   const res = await axios.get(`${API_URL}/api/analytics/bakingccp/runs/${runId}/live`, {
     headers: authHeaders(),
@@ -92,7 +98,6 @@ const stopBaking = async (runId) => {
   return res.data;
 };
 
-// Complete / Verify
 const completeRun = async (runId, payload) => {
   const res = await axios.post(`${API_URL}/api/analytics/bakingccp/runs/${runId}/complete`, payload, {
     headers: authHeaders(),
@@ -100,8 +105,33 @@ const completeRun = async (runId, payload) => {
   return res.data;
 };
 
+// Legacy verify (kept for backward compatibility)
 const verifyRun = async (runId) => {
   const res = await axios.post(`${API_URL}/api/analytics/bakingccp/runs/${runId}/verify`, {}, {
+    headers: authHeaders(),
+  });
+  return res.data;
+};
+
+// ✅ QA: fetch ingredient lot codes for a batch
+const getBatchIngredients = async (batchId) => {
+  const res = await axios.get(`${API_URL}/api/logs/${batchId}/ingredients`, {
+    headers: authHeaders(),
+  });
+  return res.data;
+};
+
+// ✅ QA: bulk-update ingredient lot codes before verifying
+const updateBatchIngredients = async (batchId, ingredients) => {
+  const res = await axios.put(`${API_URL}/api/logs/${batchId}/ingredients`, { ingredients }, {
+    headers: authHeaders(),
+  });
+  return res.data;
+};
+
+// ✅ QA: verify + create ProductionLog in one transaction
+const verifyAndLog = async (runId, payload) => {
+  const res = await axios.post(`${API_URL}/api/analytics/bakingccp/runs/${runId}/verify-and-log`, payload, {
     headers: authHeaders(),
   });
   return res.data;
@@ -110,7 +140,6 @@ const verifyRun = async (runId) => {
 // --------------------
 // TEMPERATURE READINGS
 // --------------------
-// payload: { temperatureF, cartId?, takenAt? }
 const addTempReading = async (runId, payload) => {
   const res = await axios.post(
     `${API_URL}/api/analytics/bakingccp/runs/${runId}/temps`,
@@ -121,11 +150,8 @@ const addTempReading = async (runId, payload) => {
 };
 
 // --------------------
-// CARTS (baking creates; packaging processes)
+// CARTS
 // --------------------
-
-// Create new cart (baking team)
-// payload: { productId, unitsInCart?, notes? }
 const createCart = async (runId, payload) => {
   const res = await axios.post(`${API_URL}/api/analytics/bakingccp/runs/${runId}/carts`, payload, {
     headers: authHeaders(),
@@ -133,7 +159,6 @@ const createCart = async (runId, payload) => {
   return res.data;
 };
 
-// Mark cart blast-in (packaging team)
 const markCartBlastIn = async (cartId) => {
   const res = await axios.post(`${API_URL}/api/analytics/bakingccp/carts/${cartId}/blast-in`, {}, {
     headers: authHeaders(),
@@ -141,7 +166,6 @@ const markCartBlastIn = async (cartId) => {
   return res.data;
 };
 
-// Mark cart blast-out (packaging team)
 const markCartBlastOut = async (cartId) => {
   const res = await axios.post(`${API_URL}/api/analytics/bakingccp/carts/${cartId}/blast-out`, {}, {
     headers: authHeaders(),
@@ -150,16 +174,12 @@ const markCartBlastOut = async (cartId) => {
 };
 
 const bakingCcpService = {
-  // config
   getConfig,
   saveConfig,
-
-  // legacy reference
   getBatches,
-
-  // runs
   startRun,
   getActiveRun,
+  getRuns,
   getRun,
   getRunLive,
   pauseRun,
@@ -167,9 +187,10 @@ const bakingCcpService = {
   stopBaking,
   completeRun,
   verifyRun,
+  verifyAndLog,
+  getBatchIngredients,
+  updateBatchIngredients,
   addTempReading,
-
-  // carts
   createCart,
   markCartBlastIn,
   markCartBlastOut,

@@ -1,17 +1,21 @@
 // src/pages/AddLog.js
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import { jwtDecode } from 'jwt-decode';
 import logService from '../services/logService';
 import ingredientService from '../services/ingredientService';
 import productService from '../services/productService';
+import bakingCcpService from '../services/bakingCcpService';
 
 function AddLog() {
   const [products, setProducts] = useState([]);
   const [ingredients, setIngredients] = useState([]);
   const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState('success'); // 'success' | 'danger'
   const [lotCode, setLotCode] = useState('');
   const [productionDate, setProductionDate] = useState(() => {
     const today = new Date();
-    return today.toISOString().slice(0, 10); // YYYY-MM-DD for <input type="date">
+    return today.toISOString().slice(0, 10);
   });
   const [entries, setEntries] = useState([
     { productId: '', productName: '', quantity: '' }
@@ -21,8 +25,31 @@ function AddLog() {
     { ingredientId: '', ingredientLotCode: '', quantity: '', uom: 'lb' }
   ]);
 
-  // Cache product recipes so we only fetch once per product
+  // QA banner state
+  const [pendingRuns, setPendingRuns] = useState([]);
+  const [canReviewQA, setCanReviewQA] = useState(false);
+
   const cachedRecipesRef = useRef({});
+
+  useEffect(() => {
+    // Determine role from token
+    try {
+      const token = localStorage.getItem('token');
+      if (token) {
+        const decoded = jwtDecode(token);
+        const role = decoded?.role || '';
+        setCanReviewQA(role === 'admin' || role === 'qa');
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
+
+  // Fetch pending QA runs if user has permission
+  useEffect(() => {
+    if (!canReviewQA) return;
+    bakingCcpService.getRuns('COMPLETED')
+      .then(res => setPendingRuns(Array.isArray(res?.runs) ? res.runs : []))
+      .catch(() => setPendingRuns([]));
+  }, [canReviewQA]);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -36,14 +63,12 @@ function AddLog() {
         setLotCode(generatePizzaciniLotCode());
       } catch (error) {
         console.error('Error loading data:', error);
-        setMessage('Error loading data.');
-        autoDismissMessage();
+        showMessage('Error loading data.', 'danger');
       }
     };
     loadInitialData();
   }, []);
 
-  // Prefill ingredient entries based on selected products
   useEffect(() => {
     const updateIngredientEntries = async () => {
       const allIngredientIds = new Set();
@@ -65,7 +90,7 @@ function AddLog() {
         ingredientId: id,
         ingredientLotCode: '',
         quantity: '',
-        uom: 'lb', // default for US operators
+        uom: 'lb',
       }));
       setIngredientEntries(newIng);
     };
@@ -81,8 +106,10 @@ function AddLog() {
     return `${month}-1${year}${day}1`;
   };
 
-  const autoDismissMessage = () => {
-    setTimeout(() => setMessage(''), 3000);
+  const showMessage = (msg, type = 'success') => {
+    setMessage(msg);
+    setMessageType(type);
+    setTimeout(() => setMessage(''), 3500);
   };
 
   const toKg = (qty, uom) => {
@@ -93,7 +120,6 @@ function AddLog() {
     return null;
   };
 
-  // --- Product‐picker handlers ---
   const handleProductInputChange = (idx, value) => {
     const clone = [...entries];
     clone[idx].productName = value;
@@ -121,7 +147,6 @@ function AddLog() {
     setProductSuggestions(ps => ({ ...ps, [idx]: products }));
   };
 
-  // --- Other form handlers ---
   const handleEntryChange = (idx, field, value) => {
     const clone = [...entries];
     clone[idx][field] = value;
@@ -138,97 +163,110 @@ function AddLog() {
     setIngredientEntries(clone);
   };
   const addIngredientEntry = () =>
-    setIngredientEntries(i => [...i, { ingredientId: '', ingredientLotCode: '' }]);
+    setIngredientEntries(i => [...i, { ingredientId: '', ingredientLotCode: '', quantity: '', uom: 'lb' }]);
   const removeIngredientEntry = idx =>
     setIngredientEntries(i => i.filter((_, i2) => i2 !== idx));
 
-const handleSubmit = async e => {
-  e.preventDefault();
+  const handleSubmit = async e => {
+    e.preventDefault();
 
-  if (!productionDate) {
-    setMessage('Please select a production date.');
-    return autoDismissMessage();
-  }
+    if (!productionDate) {
+      return showMessage('Please select a production date.', 'danger');
+    }
+    if (entries.some(en => !en.productId || !en.quantity)) {
+      return showMessage('Please fill out all product fields.', 'danger');
+    }
+    if (
+      ingredientEntries.some(en =>
+        !en.ingredientId ||
+        !en.ingredientLotCode ||
+        en.quantity === '' ||
+        !Number.isFinite(Number(en.quantity)) ||
+        Number(en.quantity) <= 0
+      )
+    ) {
+      return showMessage('Please fill out all ingredient fields (including quantity).', 'danger');
+    }
 
-  if (entries.some(en => !en.productId || !en.quantity)) {
-    setMessage('Please fill out all product fields.');
-    return autoDismissMessage();
-  }
+    try {
+      const ingredientPayload = ingredientEntries.map(en => {
+        const uom = (en.uom || 'lb').toLowerCase();
+        const qKg = toKg(en.quantity, uom);
+        if (!Number.isFinite(qKg) || qKg <= 0) {
+          throw new Error('Invalid ingredient quantity/unit. Please check quantities and units.');
+        }
+        return {
+          ingredientId: Number(en.ingredientId),
+          ingredientLotCode: String(en.ingredientLotCode || '').trim(),
+          quantityKg: qKg,
+          quantityInput: Number(en.quantity),
+          uomInput: uom,
+        };
+      });
 
-  if (
-    ingredientEntries.some(en =>
-      !en.ingredientId ||
-      !en.ingredientLotCode ||
-      en.quantity === '' ||
-      !Number.isFinite(Number(en.quantity)) ||
-      Number(en.quantity) <= 0
-    )
-  ) {
-    setMessage('Please fill out all ingredient fields (including quantity).');
-    return autoDismissMessage();
-  }
+      await logService.addBatchLogs({
+        entries: entries.map(en => ({ ...en, lotCode })),
+        ingredientEntries: ingredientPayload,
+        lotCode,
+        production_date: productionDate,
+      });
 
-  try {
-    const ingredientPayload = ingredientEntries.map(en => {
-      const uom = (en.uom || 'lb').toLowerCase();
-      const qKg = toKg(en.quantity, uom);
+      showMessage('Production batch submitted successfully.', 'success');
 
-      if (!Number.isFinite(qKg) || qKg <= 0) {
-        throw new Error('Invalid ingredient quantity/unit. Please check quantities and units.');
-      }
-
-      return {
-        ingredientId: Number(en.ingredientId),
-        ingredientLotCode: String(en.ingredientLotCode || '').trim(),
-        quantityKg: qKg,                    // canonical
-        quantityInput: Number(en.quantity), // audit
-        uomInput: uom,                      // audit
-      };
-    });
-
-    await logService.addBatchLogs({
-      entries: entries.map(en => ({ ...en, lotCode })),
-      ingredientEntries: ingredientPayload,
-      lotCode,
-      production_date: productionDate,
-    });
-
-    setMessage('Production batch submitted successfully.');
-    autoDismissMessage();
-
-    setEntries([{ productId: '', productName: '', quantity: '' }]);
-    setIngredientEntries([{ ingredientId: '', ingredientLotCode: '', quantity: '', uom: 'lb' }]);
-    setLotCode(generatePizzaciniLotCode());
-
-    const today = new Date();
-    setProductionDate(today.toISOString().slice(0, 10));
-  } catch (err) {
-    console.error(err);
-    const msg = err?.message || 'Error submitting batch logs.';
-    setMessage(msg);
-    autoDismissMessage();
-  }
-};
+      setEntries([{ productId: '', productName: '', quantity: '' }]);
+      setIngredientEntries([{ ingredientId: '', ingredientLotCode: '', quantity: '', uom: 'lb' }]);
+      setLotCode(generatePizzaciniLotCode());
+      setProductionDate(new Date().toISOString().slice(0, 10));
+    } catch (err) {
+      console.error(err);
+      showMessage(err?.message || 'Error submitting batch logs.', 'danger');
+    }
+  };
 
   return (
-    <div className="container mt-5">
-      <h2>Add Production Batch</h2>
+    <div className="container mt-4">
 
+      {/* ── Floating message banner ── */}
       {message && (
-        <div className="fixed-top mt-5 d-flex justify-content-center">
-          <div
-            className="alert alert-success alert-dismissible fade show w-50"
-            role="alert"
-          >
+        <div className="fixed-top mt-5 d-flex justify-content-center" style={{ zIndex: 1100 }}>
+          <div className={`alert alert-${messageType} alert-dismissible fade show w-50`} role="alert">
             {message}
-            <button
-              type="button"
-              className="btn-close"
-              onClick={() => setMessage('')}
-            ></button>
+            <button type="button" className="btn-close" onClick={() => setMessage('')} />
           </div>
         </div>
       )}
+
+      {/* ── QA Pending Review Banner ── */}
+      {canReviewQA && pendingRuns.length > 0 && (
+        <div className="alert alert-warning d-flex align-items-center justify-content-between gap-3 mb-4" role="alert">
+          <div>
+            <strong>⚠ {pendingRuns.length} run{pendingRuns.length > 1 ? 's' : ''} pending QA verification.</strong>
+            <div style={{ fontSize: 13 }} className="mt-1">
+              The following batches were completed by the production team and are waiting for QA review:{' '}
+              {pendingRuns.slice(0, 3).map((r, i) => (
+                <span key={r.id}>
+                  <strong>{r.Batch?.lotCode || `Run #${r.id}`}</strong>
+                  {i < Math.min(pendingRuns.length, 3) - 1 ? ', ' : ''}
+                </span>
+              ))}
+              {pendingRuns.length > 3 && <span> and {pendingRuns.length - 3} more</span>}
+            </div>
+          </div>
+          <Link
+            to="/ccp/baking/queue"
+            className="btn btn-warning text-dark flex-shrink-0"
+            style={{ fontWeight: 700, whiteSpace: 'nowrap' }}
+          >
+            Go to QA Queue →
+          </Link>
+        </div>
+      )}
+
+      <h2>Add Production Batch</h2>
+      <p className="text-muted" style={{ fontSize: 13 }}>
+        Use this form to manually log a production batch. If you completed a run through the live baking process, use the{' '}
+        <Link to="/ccp/baking/queue">QA Review Queue</Link> instead.
+      </p>
 
       <form onSubmit={handleSubmit}>
         <h4>Batch Lot & Date</h4>
@@ -265,9 +303,7 @@ const handleSubmit = async e => {
                   type="text"
                   className="form-control"
                   value={entry.productName}
-                  onChange={e =>
-                    handleProductInputChange(idx, e.target.value)
-                  }
+                  onChange={e => handleProductInputChange(idx, e.target.value)}
                   required
                 />
                 <button
@@ -281,12 +317,7 @@ const handleSubmit = async e => {
               {productSuggestions[idx]?.length > 0 && (
                 <ul
                   className="list-group position-absolute w-100 mt-1"
-                  style={{
-                    maxHeight: '250px',
-                    overflowY: 'auto',
-                    zIndex: 1000,
-                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                  }}
+                  style={{ maxHeight: '250px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
                 >
                   {productSuggestions[idx].map(p => (
                     <li
@@ -307,28 +338,18 @@ const handleSubmit = async e => {
                 type="number"
                 className="form-control"
                 value={entry.quantity}
-                onChange={e =>
-                  handleEntryChange(idx, 'quantity', e.target.value)
-                }
+                onChange={e => handleEntryChange(idx, 'quantity', e.target.value)}
                 required
               />
             </div>
             <div className="col-sm-2 col-12 d-flex align-items-end">
-              <button
-                type="button"
-                className="btn btn-danger w-100"
-                onClick={() => removeEntry(idx)}
-              >
+              <button type="button" className="btn btn-danger w-100" onClick={() => removeEntry(idx)}>
                 Remove
               </button>
             </div>
           </div>
         ))}
-        <button
-          type="button"
-          className="btn btn-secondary mb-3"
-          onClick={addEntry}
-        >
+        <button type="button" className="btn btn-secondary mb-3" onClick={addEntry}>
           Add Product
         </button>
 
@@ -387,11 +408,7 @@ const handleSubmit = async e => {
             </div>
 
             <div className="col-md-1 col-6 d-flex align-items-end">
-              <button
-                type="button"
-                className="btn btn-danger w-100"
-                onClick={() => removeIngredientEntry(idx)}
-              >
+              <button type="button" className="btn btn-danger w-100" onClick={() => removeIngredientEntry(idx)}>
                 Remove
               </button>
             </div>
@@ -399,11 +416,7 @@ const handleSubmit = async e => {
         ))}
 
         <div className="d-flex justify-content-center gap-3 mb-5">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={addIngredientEntry}
-          >
+          <button type="button" className="btn btn-secondary" onClick={addIngredientEntry}>
             Add Ingredient
           </button>
           <button type="submit" className="btn btn-primary">

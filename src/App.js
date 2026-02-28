@@ -26,36 +26,27 @@ import authService from './services/authService';
 import BakingCcpConfigPage from './pages/ccp/BakingCcpConfigPage';
 import BakingCcpStartPage from './pages/ccp/BakingCcpStartPage';
 import BakingCcpLivePage from './pages/ccp/BakingCcpLivePage';
+import BakingCcpQueuePage from './pages/ccp/BakingCcpQueuePage';
+import BakingCcpVerifyPage from './pages/ccp/BakingCcpVerifyPage';
 
 function App() {
   const isAuthed = authService.isTokenValid();
-  if (!isAuthed) authService.clearToken(); // optional but recommended
+  if (!isAuthed) authService.clearToken();
 
   return (
     <Router>
       <Navbar />
       <Routes>
-        {/* Public route: redirect to /traceability if already logged in */}
+        {/* Public route */}
         <Route
           path="/"
-          element={
-            isAuthed
-              ? <Navigate to="/traceability" replace />
-              : <Login />
-          }
+          element={isAuthed ? <Navigate to="/traceability" replace /> : <Login />}
         />
 
-        {/* Protected routes for all authenticated users */}
-        <Route
-          path="/logs"
-          element={
-            <ProtectedRoute>
-              <ProductionLog />
-            </ProtectedRoute>
-          }
-        />
+        {/* All authenticated users */}
+        <Route path="/logs" element={<ProtectedRoute><ProductionLog /></ProtectedRoute>} />
 
-        {/* Admin & factory_team can add production logs */}
+        {/* Admin & factory_team */}
         <Route
           path="/add-log"
           element={
@@ -65,119 +56,49 @@ function App() {
           }
         />
 
-        {/* Admin-only pages */}
+        {/* Admin-only */}
+        <Route path="/admin/products" element={<ProtectedRoute allowedRoles={['admin']}><AdminProductPage /></ProtectedRoute>} />
+        <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['admin']}><AdminUserManagement /></ProtectedRoute>} />
+        <Route path="/admin/customers" element={<ProtectedRoute allowedRoles={['admin']}><AdminCustomerPage /></ProtectedRoute>} />
+        <Route path="/admin/orders" element={<ProtectedRoute allowedRoles={['admin']}><AdminOrdersPage /></ProtectedRoute>} />
+
+        <Route path="/trends/*" element={<ProtectedRoute allowedRoles={['admin']}><TrendsAnalyticsPage /></ProtectedRoute>} />
+        <Route path="/trends/production/labor" element={<ProtectedRoute allowedRoles={['admin']}><ProductionLaborPage /></ProtectedRoute>} />
+        <Route path="/trends/complaints/new" element={<ProtectedRoute allowedRoles={['admin']}><NewComplaintPage /></ProtectedRoute>} />
+        <Route path="/trends/environmental/config" element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}><EnvironmentalConfigPage /></ProtectedRoute>} />
+        <Route path="/trends/environmental/new" element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}><EnvironmentalNewATPPage /></ProtectedRoute>} />
+
+        {/* CCP — baking (factory + admin) */}
+        <Route path="/ccp/baking/config" element={<ProtectedRoute allowedRoles={['admin']}><BakingCcpConfigPage /></ProtectedRoute>} />
+        <Route path="/ccp/baking/start" element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}><BakingCcpStartPage /></ProtectedRoute>} />
+        <Route path="/ccp/baking/live/:runId" element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}><BakingCcpLivePage /></ProtectedRoute>} />
+
+        {/* CCP — QA review (qa + admin) */}
         <Route
-          path="/admin/products"
+          path="/ccp/baking/queue"
           element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <AdminProductPage />
+            <ProtectedRoute allowedRoles={['admin', 'qa']}>
+              <BakingCcpQueuePage />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/admin/users"
+          path="/ccp/baking/verify/:runId"
           element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <AdminUserManagement />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/customers"
-          element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <AdminCustomerPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/orders"
-          element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <AdminOrdersPage />
+            <ProtectedRoute allowedRoles={['admin', 'qa']}>
+              <BakingCcpVerifyPage />
             </ProtectedRoute>
           }
         />
 
-        <Route path="/trends/*"
-          element={<ProtectedRoute allowedRoles={['admin']}>
-            <TrendsAnalyticsPage />
-          </ProtectedRoute>}
-        />
+        {/* Factory orders */}
+        <Route path="/factory/orders" element={<ProtectedRoute><FactoryOrdersPage /></ProtectedRoute>} />
 
-        <Route path="/trends/production/labor"
-          element={<ProtectedRoute allowedRoles={['admin']}>
-            <ProductionLaborPage />
-          </ProtectedRoute>}
-        />
+        {/* All authenticated */}
+        <Route path="/traceability" element={<ProtectedRoute><TraceabilityPage /></ProtectedRoute>} />
+        <Route path="/inventory" element={<ProtectedRoute><InventoryPage /></ProtectedRoute>} />
 
-        <Route
-          path="/trends/complaints/new"
-          element={<ProtectedRoute allowedRoles={['admin']}>
-            <NewComplaintPage />
-          </ProtectedRoute>}
-        />
-
-        <Route path="/trends/environmental/config"
-          element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}>
-            <EnvironmentalConfigPage />
-          </ProtectedRoute>} />
-
-        <Route path="/trends/environmental/new"
-          element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}>
-            <EnvironmentalNewATPPage />
-          </ProtectedRoute>} />
-
-        <Route
-          path="/ccp/baking/config"
-          element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <BakingCcpConfigPage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route path="/ccp/baking/start" element={
-          <ProtectedRoute allowedRoles={['admin', 'factory_team']}>
-            <BakingCcpStartPage />
-          </ProtectedRoute>
-        } />
-
-        <Route path="/ccp/baking/live/:runId" element={
-          <ProtectedRoute allowedRoles={['admin', 'factory_team']}>
-            <BakingCcpLivePage />
-          </ProtectedRoute>
-        } />
-
-        {/* Factory and admin can view/fulfill orders */}
-        <Route
-          path="/factory/orders"
-          element={
-            <ProtectedRoute>
-              <FactoryOrdersPage />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Traceability and Inventory for all authenticated users */}
-        <Route
-          path="/traceability"
-          element={
-            <ProtectedRoute>
-              <TraceabilityPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/inventory"
-          element={
-            <ProtectedRoute>
-              <InventoryPage />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* 404 fallback */}
+        {/* 404 */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Router>

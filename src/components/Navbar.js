@@ -2,17 +2,20 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 import logo from '../media/Pizzacini/logo_text.png';
-import bakingCcpService from '../services/bakingCcpService'; 
+import bakingCcpService from '../services/bakingCcpService';
 
 function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState('');
-  const [isExpanded, setIsExpanded] = useState(false);   // bootstrap collapse (mobile)
-  const [isMenuOpen, setIsMenuOpen] = useState(false);   // desktop dropdown (lg+)
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // active run state
   const [activeRunId, setActiveRunId] = useState(null);
   const [checkingActiveRun, setCheckingActiveRun] = useState(false);
+
+  // QA queue badge count
+  const [pendingQACount, setPendingQACount] = useState(0);
 
   const navbarRef = useRef();
   const location = useLocation();
@@ -29,15 +32,12 @@ function Navbar() {
     try {
       const decodedToken = jwtDecode(token);
       const nowSec = Math.floor(Date.now() / 1000);
-
-      // if no exp or expired => treat as logged out
       if (!decodedToken?.exp || decodedToken.exp <= nowSec) {
         localStorage.removeItem('token');
         setIsLoggedIn(false);
         setUserRole('');
         return;
       }
-
       setIsLoggedIn(true);
       setUserRole(decodedToken.role || '');
     } catch (e) {
@@ -60,7 +60,6 @@ function Navbar() {
 
   useEffect(() => {
     checkLoginStatus();
-    // Close menus on route change
     setIsExpanded(false);
     setIsMenuOpen(false);
   }, [location]);
@@ -69,7 +68,8 @@ function Navbar() {
     localStorage.removeItem('token');
     setIsLoggedIn(false);
     setUserRole('');
-    setActiveRunId(null); 
+    setActiveRunId(null);
+    setPendingQACount(0);
     navigate('/', { replace: true });
   };
 
@@ -78,13 +78,16 @@ function Navbar() {
   const perms = useMemo(() => {
     const isAdmin = userRole === 'admin';
     const isFactory = userRole === 'factory_team';
+    const isQA = userRole === 'qa';
     return {
       isAdmin,
       isFactory,
+      isQA,
       canAddLog: isAdmin || isFactory,
       canManageOrders: isAdmin || isFactory,
       canSubmitOrders: isAdmin || isFactory,
       canStartProduction: isAdmin || isFactory,
+      canReviewQA: isAdmin || isQA,
     };
   }, [userRole]);
 
@@ -93,35 +96,49 @@ function Navbar() {
     setIsMenuOpen(false);
   };
 
-  // resolve active run (used by navbar button)
+  // Fetch active run for factory/admin
   useEffect(() => {
     let cancelled = false;
-
     const fetchActiveRun = async () => {
-      // Only check if logged in + allowed
       if (!isLoggedIn || !perms.canStartProduction) {
         setActiveRunId(null);
         return;
       }
-
       setCheckingActiveRun(true);
       try {
         const res = await bakingCcpService.getActiveRun();
         const run = res?.run || null;
         if (!cancelled) setActiveRunId(run?.id ?? null);
       } catch (e) {
-        // Silent fail: don’t spam user; just assume no active run
         if (!cancelled) setActiveRunId(null);
       } finally {
         if (!cancelled) setCheckingActiveRun(false);
       }
     };
-
     fetchActiveRun();
     return () => { cancelled = true; };
   }, [isLoggedIn, perms.canStartProduction, location.pathname]);
 
-  // Centralize paths so you can adjust easily
+  // Fetch pending QA count for qa/admin
+  useEffect(() => {
+    let cancelled = false;
+    const fetchPendingQA = async () => {
+      if (!isLoggedIn || !perms.canReviewQA) {
+        setPendingQACount(0);
+        return;
+      }
+      try {
+        const res = await bakingCcpService.getRuns('COMPLETED');
+        const count = Array.isArray(res?.runs) ? res.runs.length : 0;
+        if (!cancelled) setPendingQACount(count);
+      } catch (e) {
+        if (!cancelled) setPendingQACount(0);
+      }
+    };
+    fetchPendingQA();
+    return () => { cancelled = true; };
+  }, [isLoggedIn, perms.canReviewQA, location.pathname]);
+
   const LIVE_RUN_PATH = activeRunId ? `/ccp/baking/live/${activeRunId}` : '/ccp/baking/start';
 
   return (
@@ -139,25 +156,17 @@ function Navbar() {
       >
         <div className="container-fluid">
           <Link className="navbar-brand d-flex align-items-center" to={isLoggedIn ? "/traceability" : "/"} onClick={closeAll}>
-            <img
-              src={logoUrl}
-              alt="Company Logo"
-              style={{ height: '40px', marginRight: '10px' }}
-            />
+            <img src={logoUrl} alt="Company Logo" style={{ height: '40px', marginRight: '10px' }} />
             quickLOG
           </Link>
-
-          {/* Mobile collapse toggle (Bootstrap hamburger) */}
+        {/* Mobile collapse toggle (Bootstrap hamburger) */}
           <button
             className="navbar-toggler"
             type="button"
             aria-controls="navbarNav"
             aria-expanded={isExpanded ? 'true' : 'false'}
             aria-label="Toggle navigation"
-            onClick={() => {
-              setIsExpanded((v) => !v);
-              setIsMenuOpen(false);
-            }}
+            onClick={() => { setIsExpanded((v) => !v); setIsMenuOpen(false); }}
           >
             <span className="navbar-toggler-icon"></span>
           </button>
@@ -166,13 +175,10 @@ function Navbar() {
             <ul className="navbar-nav ms-auto align-items-lg-center gap-2">
               {!isLoggedIn ? (
                 <li className="nav-item">
-                  <Link className="nav-link" to="/" onClick={closeAll}>
-                    Login
-                  </Link>
+                  <Link className="nav-link" to="/" onClick={closeAll}>Login</Link>
                 </li>
               ) : (
                 <>
-                  {/* Always-visible actions (as requested) */}
                   {perms.canAddLog && (
                     <li className="nav-item">
                       <Link className="btn btn-outline-light" to="/add-log" onClick={closeAll}>
@@ -189,6 +195,28 @@ function Navbar() {
                     </li>
                   )}
 
+                  {/* QA Review button — qa and admin only */}
+                  {perms.canReviewQA && (
+                    <li className="nav-item">
+                      <Link
+                        className="btn btn-outline-warning position-relative"
+                        to="/ccp/baking/queue"
+                        onClick={closeAll}
+                        title="QA Review Queue"
+                      >
+                        QA Review
+                        {pendingQACount > 0 && (
+                          <span
+                            className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                            style={{ fontSize: 10 }}
+                          >
+                            {pendingQACount}
+                          </span>
+                        )}
+                      </Link>
+                    </li>
+                  )}
+
                   {perms.canStartProduction && (
                     <li className="nav-item">
                       <Link
@@ -200,15 +228,13 @@ function Navbar() {
                         {activeRunId ? (
                           <>
                             Production in Progress{' '}
-                            <span className="badge bg-light text-dark ms-2">
-                              RUN #{activeRunId}
-                            </span>
+                            <span className="badge bg-light text-dark ms-2">RUN #{activeRunId}</span>
                           </>
                         ) : (
                           <>
                             Start Production
                             {checkingActiveRun && (
-                              <span className="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>
+                              <span className="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true" />
                             )}
                           </>
                         )}
@@ -224,72 +250,56 @@ function Navbar() {
                     </li>
                   )}
 
-                  {/* MOBILE-ONLY LINKS (appear in the collapsed menu) */}
+                  {/* MOBILE-ONLY links */}
                   <li className="nav-item d-lg-none">
-                    <Link className="nav-link" to="/logs" onClick={closeAll}>
-                      Production Logs
-                    </Link>
+                    <Link className="nav-link" to="/logs" onClick={closeAll}>Production Logs</Link>
                   </li>
                   <li className="nav-item d-lg-none">
-                    <Link className="nav-link" to="/traceability" onClick={closeAll}>
-                      Traceability
-                    </Link>
+                    <Link className="nav-link" to="/traceability" onClick={closeAll}>Traceability</Link>
                   </li>
                   <li className="nav-item d-lg-none">
-                    <Link className="nav-link" to="/inventory" onClick={closeAll}>
-                      Inventory
-                    </Link>
+                    <Link className="nav-link" to="/inventory" onClick={closeAll}>Inventory</Link>
                   </li>
 
                   {perms.isAdmin && (
                     <>
                       <li className="nav-item d-lg-none">
-                        <Link className="nav-link" to="/trends" onClick={closeAll}>
-                          Trends and Analytics
-                        </Link>
+                        <Link className="nav-link" to="/trends" onClick={closeAll}>Trends and Analytics</Link>
                       </li>
                       <li className="nav-item d-lg-none">
-                        <Link className="nav-link" to="/ccp/baking/config" onClick={closeAll}>
-                          Baking CCP Config
-                        </Link>
+                        <Link className="nav-link" to="/ccp/baking/config" onClick={closeAll}>Baking CCP Config</Link>
                       </li>
                       <li className="nav-item d-lg-none">
-                        <Link className="nav-link" to="/admin/products" onClick={closeAll}>
-                          Create Product
-                        </Link>
+                        <Link className="nav-link" to="/admin/products" onClick={closeAll}>Create Product</Link>
                       </li>
                       <li className="nav-item d-lg-none">
-                        <Link className="nav-link" to="/admin/users" onClick={closeAll}>
-                          User Management
-                        </Link>
+                        <Link className="nav-link" to="/admin/users" onClick={closeAll}>User Management</Link>
                       </li>
                       <li className="nav-item d-lg-none">
-                        <Link className="nav-link" to="/admin/customers" onClick={closeAll}>
-                          Customers
-                        </Link>
+                        <Link className="nav-link" to="/admin/customers" onClick={closeAll}>Customers</Link>
                       </li>
                     </>
                   )}
 
+                  {/* QA-only mobile link */}
+                  {perms.isQA && (
+                    <li className="nav-item d-lg-none">
+                      <Link className="nav-link" to="/ccp/baking/queue" onClick={closeAll}>QA Review Queue</Link>
+                    </li>
+                  )}
+
                   <li className="nav-item d-lg-none">
-                    <button className="btn btn-outline-danger w-100 mt-2" onClick={handleLogout}>
-                      Logout
-                    </button>
+                    <button className="btn btn-outline-danger w-100 mt-2" onClick={handleLogout}>Logout</button>
                   </li>
 
-                  {/* DESKTOP-ONLY DROPDOWN (lg+) */}
+                  {/* DESKTOP DROPDOWN */}
                   <li className="nav-item dropdown d-none d-lg-block" style={{ position: 'relative' }}>
                     <button
                       className="btn btn-outline-light"
                       type="button"
                       aria-expanded={isMenuOpen ? 'true' : 'false'}
                       onClick={() => setIsMenuOpen((v) => !v)}
-                      style={{
-                        fontSize: '22px',
-                        fontWeight: 700,
-                        lineHeight: 1,
-                        padding: '6px 12px',
-                      }}
+                      style={{ fontSize: '22px', fontWeight: 700, lineHeight: 1, padding: '6px 12px' }}
                       title="Menu"
                     >
                       ☰
@@ -297,50 +307,38 @@ function Navbar() {
 
                     <div
                       className={`dropdown-menu ${isMenuOpen ? 'show' : ''}`}
-                      style={{
-                        position: 'absolute',
-                        right: 0,
-                        left: 'auto',
-                        minWidth: 240,
-                        maxWidth: '90vw',
-                        overflowWrap: 'break-word',
-                      }}
+                      style={{ position: 'absolute', right: 0, left: 'auto', minWidth: 240, maxWidth: '90vw', overflowWrap: 'break-word' }}
                     >
-                      <Link className="dropdown-item" to="/logs" onClick={closeAll}>
-                        Production Logs
-                      </Link>
-                      <Link className="dropdown-item" to="/traceability" onClick={closeAll}>
-                        Traceability
-                      </Link>
-                      <Link className="dropdown-item" to="/inventory" onClick={closeAll}>
-                        Inventory
-                      </Link>
+                      <Link className="dropdown-item" to="/logs" onClick={closeAll}>Production Logs</Link>
+                      <Link className="dropdown-item" to="/traceability" onClick={closeAll}>Traceability</Link>
+                      <Link className="dropdown-item" to="/inventory" onClick={closeAll}>Inventory</Link>
 
-                      {perms.isAdmin && (
+                      {/* QA review in dropdown for both admin and qa */}
+                      {perms.canReviewQA && (
                         <>
                           <div className="dropdown-divider" />
-                          <Link className="dropdown-item" to="/trends" onClick={closeAll}>
-                            Trends and Analytics
-                          </Link>
-                          <Link className="dropdown-item" to="/ccp/baking/config" onClick={closeAll}>
-                            Baking CCP Config
-                          </Link>
-                          <Link className="dropdown-item" to="/admin/products" onClick={closeAll}>
-                            Create Product
-                          </Link>
-                          <Link className="dropdown-item" to="/admin/users" onClick={closeAll}>
-                            User Management
-                          </Link>
-                          <Link className="dropdown-item" to="/admin/customers" onClick={closeAll}>
-                            Customers
+                          <Link className="dropdown-item d-flex justify-content-between align-items-center" to="/ccp/baking/queue" onClick={closeAll}>
+                            QA Review Queue
+                            {pendingQACount > 0 && (
+                              <span className="badge bg-danger ms-2">{pendingQACount}</span>
+                            )}
                           </Link>
                         </>
                       )}
 
+                      {perms.isAdmin && (
+                        <>
+                          <div className="dropdown-divider" />
+                          <Link className="dropdown-item" to="/trends" onClick={closeAll}>Trends and Analytics</Link>
+                          <Link className="dropdown-item" to="/ccp/baking/config" onClick={closeAll}>Baking CCP Config</Link>
+                          <Link className="dropdown-item" to="/admin/products" onClick={closeAll}>Create Product</Link>
+                          <Link className="dropdown-item" to="/admin/users" onClick={closeAll}>User Management</Link>
+                          <Link className="dropdown-item" to="/admin/customers" onClick={closeAll}>Customers</Link>
+                        </>
+                      )}
+
                       <div className="dropdown-divider" />
-                      <button className="dropdown-item text-danger" onClick={handleLogout}>
-                        Logout
-                      </button>
+                      <button className="dropdown-item text-danger" onClick={handleLogout}>Logout</button>
                     </div>
                   </li>
                 </>

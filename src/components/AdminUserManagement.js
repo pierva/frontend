@@ -1,10 +1,12 @@
+// components/AdminUserManagement.js
+
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 const API_URL = process.env.REACT_APP_API_URL;
 
 function AdminUserManagement() {
     const [users, setUsers] = useState([]);
-    const [companies, setCompanies] = useState([]); // List of companies
+    const [companies, setCompanies] = useState([]);
     const [error, setError] = useState('');
     const [newUser, setNewUser] = useState({ username: '', password: '', role: 'factory_team', companyId: '' });
     const [passwordChanges, setPasswordChanges] = useState({});
@@ -18,18 +20,16 @@ function AdminUserManagement() {
                 const decodedToken = JSON.parse(atob(token.split('.')[1]));
                 setLoggedAdmin(decodedToken);
 
-                // Fetch users
                 const usersResponse = await axios.get(`${API_URL}/api/users`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 setUsers(usersResponse.data);
 
-                // Fetch companies
                 const companiesResponse = await axios.get(`${API_URL}/api/companies`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 setCompanies(companiesResponse.data);
-                
+
             } catch (error) {
                 setError('Error fetching data. Only admins can access this page.');
                 autoDismissMessage('error');
@@ -49,9 +49,7 @@ function AdminUserManagement() {
             await axios.put(
                 `${API_URL}/api/users/${userId}/role`,
                 { role: newRole },
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                }
+                { headers: { Authorization: `Bearer ${token}` } }
             );
             setUsers(users.map((user) => (user.id === userId ? { ...user, role: newRole } : user)));
             setMessage("Role successfully updated");
@@ -72,9 +70,7 @@ function AdminUserManagement() {
             await axios.put(
                 `${API_URL}/api/users/${userId}/password`,
                 { password: passwordChanges[userId] },
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                }
+                { headers: { Authorization: `Bearer ${token}` } }
             );
             setMessage('Password updated successfully');
             setPasswordChanges({ ...passwordChanges, [userId]: '' });
@@ -86,22 +82,16 @@ function AdminUserManagement() {
     };
 
     const handleAddUser = async () => {
-        // Create a copy of the newUser object
         let userPayload = { ...newUser };
-    
-        // Remove companyId if the role is not 'client'
         if (userPayload.role !== 'client') {
-            delete userPayload.companyId; // Remove the companyId field
+            delete userPayload.companyId;
         }
-    
         try {
             const token = localStorage.getItem('token');
             await axios.post(
                 `${API_URL}/api/users/register`,
-                userPayload, // Send the cleaned user payload
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                }
+                userPayload,
+                { headers: { Authorization: `Bearer ${token}` } }
             );
             setMessage('New user added successfully');
             setNewUser({ username: '', password: '', role: 'factory_team', companyId: '' });
@@ -114,7 +104,7 @@ function AdminUserManagement() {
             setError('Failed to add user.');
             autoDismissMessage('error');
         }
-    };    
+    };
 
     const autoDismissMessage = (type) => {
         setTimeout(() => {
@@ -122,6 +112,26 @@ function AdminUserManagement() {
             if (type === 'error') setError('');
         }, 3000);
     };
+
+    // Human-readable role labels
+    const roleLabel = (role) => {
+        const map = {
+            admin: 'Admin',
+            factory_team: 'Factory User',
+            client: 'Client',
+            qa: 'QA',
+        };
+        return map[role] || role;
+    };
+
+    const RoleOptions = () => (
+        <>
+            <option value="factory_team">Factory User</option>
+            <option value="qa">QA</option>
+            <option value="client">Client</option>
+            <option value="admin">Admin</option>
+        </>
+    );
 
     return (
         <div className='container mt-5'>
@@ -173,13 +183,11 @@ function AdminUserManagement() {
                         value={newUser.role}
                         onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                     >
-                        <option value="factory_team">Factory User</option>
-                        <option value="client">Client</option>
-                        <option value="admin">Admin</option>
+                        <RoleOptions />
                     </select>
                 </div>
 
-                {/* Company selection for client role */}
+                {/* Company selection — only for client role */}
                 {newUser.role === 'client' && (
                     <div className="form-group mb-2">
                         <label>Company</label>
@@ -187,7 +195,7 @@ function AdminUserManagement() {
                             className="form-select"
                             value={newUser.companyId}
                             onChange={(e) => setNewUser({ ...newUser, companyId: e.target.value })}
-                            disabled={companies.length === 0} // Disable if no companies
+                            disabled={companies.length === 0}
                         >
                             {companies.length > 0 ? (
                                 <>
@@ -205,7 +213,7 @@ function AdminUserManagement() {
                 <button
                     className="btn btn-primary mt-2"
                     onClick={handleAddUser}
-                    disabled={newUser.role === 'client' && (!newUser.companyId || companies.length === 0)} // Disable if client and no company selected
+                    disabled={newUser.role === 'client' && (!newUser.companyId || companies.length === 0)}
                 >
                     Add User
                 </button>
@@ -226,8 +234,8 @@ function AdminUserManagement() {
                     {users.map((user) => (
                         <tr key={user.id}>
                             <td>{user.username}</td>
-                            <td>{user.role}</td>
-                            <td>{user.role === 'client' ? user.Company?.name || 'Not assigned' : 'All companies'}</td>
+                            <td>{roleLabel(user.role)}</td>
+                            <td>{user.role === 'client' ? user.Company?.name || 'Not assigned' : '—'}</td>
                             <td>
                                 <select
                                     value={user.role}
@@ -235,9 +243,7 @@ function AdminUserManagement() {
                                     className="form-select"
                                     disabled={loggedAdmin && loggedAdmin.id === user.id}
                                 >
-                                    <option value="factory_team">Factory User</option>
-                                    <option value="client">Client</option>
-                                    <option value="admin">Admin</option>
+                                    <RoleOptions />
                                 </select>
                             </td>
                             <td>

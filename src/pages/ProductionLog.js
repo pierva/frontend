@@ -1,3 +1,5 @@
+// pages/ProductionLog.js
+
 import React, { useState, useEffect, useMemo } from 'react';
 import logService from '../services/logService';
 import ProductionTrendChart from '../components/ProductionTrendChart';
@@ -13,7 +15,7 @@ function ProductionLog() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalLogs, setTotalLogs] = useState(0); // eslint-disable-line no-unused-vars
 
-  // Effective filter state: these are used in the API call.
+  // Effective filter state
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -25,20 +27,14 @@ function ProductionLog() {
 
   // Sorting state
   const [sortConfig, setSortConfig] = useState({
-    key: 'production_date',   // default sort
-    direction: 'desc',        // 'asc' or 'desc'
+    key: 'production_date',
+    direction: 'desc',
   });
 
   useEffect(() => {
     const loadLogs = async () => {
       try {
-        const data = await logService.getLogs(
-          currentPage,
-          50,
-          searchTerm,
-          startDate,
-          endDate
-        );
+        const data = await logService.getLogs(currentPage, 50, searchTerm, startDate, endDate);
         setLogs(data.logs);
         setTotalPages(data.totalPages);
         setTotalLogs(data.totalLogs);
@@ -46,7 +42,6 @@ function ProductionLog() {
         console.error('Error loading logs:', error);
       }
     };
-
     loadLogs();
   }, [currentPage, searchTerm, startDate, endDate]);
 
@@ -73,20 +68,37 @@ function ProductionLog() {
     setIsModalOpen(false);
   };
 
-  // --- Sorting helpers ---
+  // ── Ingredient deduplication ──────────────────────────────────────────────
+  // The DB stores one row per (ingredientId, lotCode). When a run goes through
+  // the live baking flow, a MISSING placeholder is created first, then an
+  // ENTERED row is added by QA. We want to show:
+  //   • All ENTERED and EXCLUDED rows (these have real data)
+  //   • MISSING rows ONLY if that ingredient has no ENTERED/EXCLUDED sibling
+  //     (i.e. the lot code was genuinely never filled in)
+  // This preserves the multiple-lot-codes-per-ingredient feature while hiding
+  // the redundant placeholder rows.
+  const displayIngredients = useMemo(() => {
+    if (!ingredients.length) return [];
 
-  const handleSort = (key) => {
-    setSortConfig((prev) => {
-      if (prev.key === key) {
-        // toggle direction
-        return {
-          key,
-          direction: prev.direction === 'asc' ? 'desc' : 'asc',
-        };
-      }
-      // new key: default to ascending
-      return { key, direction: 'asc' };
+    // Find which ingredientIds have at least one non-MISSING row
+    const resolvedIds = new Set(
+      ingredients
+        .filter(i => i.status !== 'MISSING')
+        .map(i => i.ingredientId)
+    );
+
+    return ingredients.filter(i => {
+      if (i.status !== 'MISSING') return true;          // always show ENTERED / EXCLUDED
+      return !resolvedIds.has(i.ingredientId);           // only show MISSING if no resolved sibling
     });
+  }, [ingredients]);
+
+  // ── Sorting ───────────────────────────────────────────────────────────────
+  const handleSort = (key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+    }));
   };
 
   const getSortArrow = (key) => {
@@ -97,13 +109,10 @@ function ProductionLog() {
   const sortedLogs = useMemo(() => {
     const clone = [...logs];
     const { key, direction } = sortConfig;
-
     const dir = direction === 'asc' ? 1 : -1;
 
     return clone.sort((a, b) => {
-      let aVal;
-      let bVal;
-
+      let aVal, bVal;
       switch (key) {
         case 'product':
           aVal = (a.Product?.name || '').toLowerCase();
@@ -118,23 +127,40 @@ function ProductionLog() {
           bVal = b.date_logged ? new Date(b.date_logged).getTime() : 0;
           break;
         case 'production_date':
-          aVal = a.Batch?.production_date
-            ? new Date(a.Batch.production_date).getTime()
-            : 0;
-          bVal = b.Batch?.production_date
-            ? new Date(b.Batch.production_date).getTime()
-            : 0;
+          aVal = a.Batch?.production_date ? new Date(a.Batch.production_date).getTime() : 0;
+          bVal = b.Batch?.production_date ? new Date(b.Batch.production_date).getTime() : 0;
           break;
         default:
-          aVal = 0;
-          bVal = 0;
+          aVal = 0; bVal = 0;
       }
-
       if (aVal < bVal) return -1 * dir;
       if (aVal > bVal) return 1 * dir;
       return 0;
     });
   }, [logs, sortConfig]);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const formatQty = (ing) => {
+    if (ing.quantityInput == null) return '—';
+    const n = Number(ing.quantityInput);
+    const uom = ing.uomInput || '';
+    return `${Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'} ${uom}`.trim();
+  };
+
+  const statusBadge = (status) => {
+    const map = { ENTERED: 'success', MISSING: 'danger', EXCLUDED: 'secondary' };
+    return (
+      <span className={`badge bg-${map[status] || 'secondary'}`} style={{ fontSize: 11 }}>
+        {status}
+      </span>
+    );
+  };
+
+  // Count how many ingredients are still MISSING after dedup
+  const missingCount = useMemo(
+    () => displayIngredients.filter(i => i.status === 'MISSING').length,
+    [displayIngredients]
+  );
 
   return (
     <div className="container mt-5">
@@ -178,9 +204,7 @@ function ProductionLog() {
             />
           </div>
           <div className="col-md-2">
-            <button type="submit" className="btn btn-primary">
-              Search
-            </button>
+            <button type="submit" className="btn btn-primary">Search</button>
           </div>
         </div>
       </form>
@@ -189,40 +213,24 @@ function ProductionLog() {
       <table className="table table-bordered table-responsive-sm">
         <thead>
           <tr>
-            <th
-              style={{ cursor: 'pointer' }}
-              onClick={() => handleSort('product')}
-            >
+            <th style={{ cursor: 'pointer' }} onClick={() => handleSort('product')}>
               Product{getSortArrow('product')}
             </th>
-            <th
-              style={{ cursor: 'pointer' }}
-              onClick={() => handleSort('quantity')}
-            >
+            <th style={{ cursor: 'pointer' }} onClick={() => handleSort('quantity')}>
               Quantity{getSortArrow('quantity')}
             </th>
             <th>Lot Code</th>
-            <th
-              style={{ cursor: 'pointer' }}
-              onClick={() => handleSort('date_logged')}
-            >
+            <th style={{ cursor: 'pointer' }} onClick={() => handleSort('date_logged')}>
               Date Logged{getSortArrow('date_logged')}
             </th>
-            <th
-              style={{ cursor: 'pointer' }}
-              onClick={() => handleSort('production_date')}
-            >
+            <th style={{ cursor: 'pointer' }} onClick={() => handleSort('production_date')}>
               Production Date{getSortArrow('production_date')}
             </th>
           </tr>
         </thead>
         <tbody>
           {sortedLogs.map((log) => (
-            <tr
-              key={log.id}
-              onClick={() => handleRowClick(log)}
-              style={{ cursor: 'pointer' }}
-            >
+            <tr key={log.id} onClick={() => handleRowClick(log)} style={{ cursor: 'pointer' }}>
               <td>{log.Product?.name || 'Unknown Product'}</td>
               <td>{log.quantity}</td>
               <td>{log.Batch?.lotCode || 'N/A'}</td>
@@ -233,7 +241,7 @@ function ProductionLog() {
         </tbody>
       </table>
 
-      {/* Pagination Controls */}
+      {/* Pagination */}
       <div className="d-flex justify-content-between align-items-center my-3">
         <button
           className="btn btn-secondary"
@@ -242,9 +250,7 @@ function ProductionLog() {
         >
           &laquo; Previous
         </button>
-        <span>
-          Page {currentPage} of {totalPages}
-        </span>
+        <span>Page {currentPage} of {totalPages}</span>
         <button
           className="btn btn-secondary"
           onClick={() => setCurrentPage((prev) => prev + 1)}
@@ -260,52 +266,86 @@ function ProductionLog() {
           className="modal show d-block"
           tabIndex="-1"
           role="dialog"
-          style={{ marginTop: '75px' }}
+          style={{ background: 'rgba(0,0,0,0.5)', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1050 }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
         >
           <div
-            className="modal-dialog"
+            className="modal-dialog modal-lg"
             role="document"
-            style={{
-              WebkitBoxShadow: '0px -2px 17px -1px rgba(0,0,0,0.75)',
-              MozBoxShadow: '0px -2px 17px -1px rgba(0,0,0,0.75)',
-              boxShadow: '0px -2px 17px -1px rgba(0,0,0,0.75)',
-            }}
+            style={{ marginTop: '80px' }}
           >
             <div className="modal-content">
-              <div
-                className="modal-header"
-                style={{ backgroundColor: '#1b2638', color: 'white' }}
-              >
-                <h5 className="modal-title">
-                  Ingredients for Lot Code: {selectedLog.Batch?.lotCode || 'N/A'}
-                </h5>
+              <div className="modal-header" style={{ backgroundColor: '#1b2638', color: 'white' }}>
+                <div>
+                  <h5 className="modal-title mb-0">
+                    Ingredients — Lot Code: <strong>{selectedLog.Batch?.lotCode || 'N/A'}</strong>
+                  </h5>
+                  <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>
+                    {selectedLog.Product?.name} · Production: {selectedLog.Batch?.production_date || '—'}
+                  </div>
+                </div>
                 <button
                   type="button"
                   className="btn-close"
                   style={{ filter: 'invert(1)' }}
                   onClick={closeModal}
-                ></button>
+                />
               </div>
-              <div className="modal-body">
-                {ingredients.length > 0 ? (
-                  <table className="table table-bordered table-responsive-sm">
-                    <thead>
-                      <tr>
-                        <th>Ingredient</th>
-                        <th>Lot Code</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ingredients.map((ingredient) => (
-                        <tr key={ingredient.id}>
-                          <td>{ingredient.Ingredient?.name || 'Unknown'}</td>
-                          <td>{ingredient.ingredientLotCode}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+
+              <div className="modal-body p-0">
+                {displayIngredients.length === 0 ? (
+                  <div className="p-4 text-muted">No ingredients found for this batch.</div>
                 ) : (
-                  <p>No ingredients found for this log.</p>
+                  <>
+                    {/* Missing ingredients warning */}
+                    {missingCount > 0 && (
+                      <div className="alert alert-warning rounded-0 mb-0" style={{ fontSize: 13 }}>
+                        ⚠ <strong>{missingCount} ingredient{missingCount > 1 ? 's' : ''}</strong> {missingCount > 1 ? 'are' : 'is'} missing a lot code.
+                      </div>
+                    )}
+
+                    <div className="table-responsive">
+                      <table className="table table-sm align-middle mb-0">
+                        <thead className="table-light">
+                          <tr>
+                            <th style={{ paddingLeft: 16 }}>Ingredient</th>
+                            <th>Lot Code</th>
+                            <th>Quantity Used</th>
+                            <th style={{ width: 100 }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {displayIngredients.map((ing) => (
+                            <tr key={ing.id}>
+                              <td style={{ paddingLeft: 16, fontWeight: 600 }}>
+                                {ing.Ingredient?.name || `Ingredient #${ing.ingredientId}`}
+                              </td>
+                              <td>
+                                {ing.ingredientLotCode
+                                  ? <code style={{ fontSize: 13 }}>{ing.ingredientLotCode}</code>
+                                  : <span className="text-danger" style={{ fontSize: 12 }}>Not recorded</span>
+                                }
+                              </td>
+                              <td style={{ fontSize: 13 }}>{formatQty(ing)}</td>
+                              <td>{statusBadge(ing.status)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Summary footer */}
+                    <div className="px-3 py-2 border-top d-flex gap-3" style={{ fontSize: 12, color: '#6c757d' }}>
+                      <span>{displayIngredients.filter(i => i.status === 'ENTERED').length} entered</span>
+                      {missingCount > 0 && <span className="text-danger">{missingCount} missing</span>}
+                      {displayIngredients.filter(i => i.status === 'EXCLUDED').length > 0 && (
+                        <span>{displayIngredients.filter(i => i.status === 'EXCLUDED').length} excluded</span>
+                      )}
+                      <span className="ms-auto">
+                        {displayIngredients.length} ingredient{displayIngredients.length !== 1 ? 's' : ''} total
+                      </span>
+                    </div>
+                  </>
                 )}
               </div>
             </div>

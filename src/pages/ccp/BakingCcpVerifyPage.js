@@ -1,0 +1,774 @@
+// src/pages/ccp/BakingCcpVerifyPage.js
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import bakingCcpService from '../../services/bakingCcpService';
+
+export default function BakingCcpVerifyPage() {
+  const { runId } = useParams();
+  const navigate = useNavigate();
+
+  const [loading, setLoading] = useState(true);
+  const [run, setRun] = useState(null);
+  const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  // Editable QA fields
+  const [productTotals, setProductTotals] = useState([]);
+  const [deviation, setDeviation] = useState(false);
+  const [deviationNotes, setDeviationNotes] = useState('');
+  const [correctiveNotes, setCorrectiveNotes] = useState('');
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Ingredient lot codes
+  const [ingredients, setIngredients] = useState([]);
+  const [loadedBatchId, setLoadedBatchId] = useState(null); // authoritative batchId for ingredient ops
+  const [loadingIngredients, setLoadingIngredients] = useState(false);
+  const [savingIngredients, setSavingIngredients] = useState(false);
+  const [ingredientsSaved, setIngredientsSaved] = useState(false);
+
+  // Confirm modal
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const fetchRun = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await bakingCcpService.getRun(runId);
+      const r = res?.run || null;
+      setRun(r);
+      if (r) {
+        seedEditableFields(r);
+        if (r.batchId) fetchIngredients(r.batchId);
+      }
+    } catch (e) {
+      console.error(e);
+      setError('Failed to load run.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchIngredients = async (batchId) => {
+    setLoadingIngredients(true);
+    try {
+      const res = await bakingCcpService.getBatchIngredients(batchId);
+      setLoadedBatchId(batchId); // lock in the batchId we actually fetched
+      setIngredients(Array.isArray(res) ? res : []);
+    } catch (e) {
+      console.error('Failed to load ingredients', e);
+      setIngredients([]);
+    } finally {
+      setLoadingIngredients(false);
+    }
+  };
+
+  const seedEditableFields = (r) => {
+    // Product totals: prefer productTotalsJson, fall back to computing from carts
+    if (Array.isArray(r.productTotalsJson) && r.productTotalsJson.length > 0) {
+      setProductTotals(r.productTotalsJson.map(x => ({ ...x })));
+    } else {
+      // Compute from carts that have been blasted out
+      const totalsMap = new Map();
+      (r.Carts || []).forEach(c => {
+        if (!c.blastOutAt) return;
+        const pid = Number(c.productId);
+        const name = c.Product?.name || `Product #${pid}`;
+        const units = Number(c.unitsInCart) || 0;
+        if (totalsMap.has(pid)) {
+          totalsMap.get(pid).units += units;
+        } else {
+          totalsMap.set(pid, { productId: pid, name, units });
+        }
+      });
+      setProductTotals(Array.from(totalsMap.values()));
+    }
+
+    setDeviation(!!r.deviation);
+    setDeviationNotes(r.deviationNotes || '');
+    setCorrectiveNotes(r.correctiveActionNotes || '');
+    setNotes(r.notes || r.packagingNotes || '');
+  };
+
+  useEffect(() => {
+    fetchRun();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId]);
+
+  const editedTotal = useMemo(() => {
+    return productTotals.reduce((sum, r) => {
+      const n = Number(r.units);
+      return sum + (Number.isFinite(n) ? n : 0);
+    }, 0);
+  }, [productTotals]);
+
+  const isLocked = run?.isLocked || run?.status === 'VERIFIED';
+
+  const toKg = (qty, uom) => {
+    const n = Number(qty);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return uom === 'kg' ? n : n * 0.45359237;
+  };
+
+  const saveIngredients = async () => {
+    setSavingIngredients(true);
+    setError('');
+    try {
+      const payload = ingredients.map(ing => {
+        const uom = ing.uomInput || 'lb';
+        const qInput = ing.quantityInput != null ? Number(ing.quantityInput) : null;
+        const qKg = (qInput != null && Number.isFinite(qInput) && qInput > 0) ? toKg(qInput, uom) : null;
+        const lot = (ing.ingredientLotCode || '').trim();
+        let status = 'MISSING';
+        if (lot) status = (qKg != null && qKg > 0) ? 'ENTERED' : 'EXCLUDED';
+        return {
+          id: ing.id,
+          ingredientLotCode: lot || null,
+          quantityInput: qInput,
+          uomInput: uom,
+          quantityKg: qKg,
+          status,
+        };
+      });
+      const targetBatchId = loadedBatchId ?? run?.batchId;
+      if (!targetBatchId) throw new Error('Batch ID not available. Please reload the page.');
+      await bakingCcpService.updateBatchIngredients(targetBatchId, payload);
+      await fetchIngredients(targetBatchId);
+      setIngredientsSaved(true);
+      setTimeout(() => setIngredientsSaved(false), 2500);
+    } catch (e) {
+      console.error(e);
+      setError(e?.response?.data?.message || 'Failed to save ingredients.');
+    } finally {
+      setSavingIngredients(false);
+    }
+  };
+
+  const doVerify = async () => {
+    setShowConfirm(false);
+    setError('');
+    setSubmitting(true);
+    try {
+      await bakingCcpService.verifyAndLog(runId, {
+        productTotals,
+        notes,
+        deviation,
+        deviationNotes,
+        correctiveActionNotes: correctiveNotes,
+      });
+      setSuccessMsg('Run verified and production log created successfully.');
+      setTimeout(() => navigate('/ccp/baking/queue'), 1800);
+    } catch (e) {
+      console.error(e);
+      setError(e?.response?.data?.message || e?.message || 'Failed to verify run.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const formatDateTime = (d) => {
+    if (!d) return '—';
+    return new Date(d).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  };
+
+  const formatDate = (d) => {
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const carts = useMemo(() => {
+    return [...(run?.Carts || [])].sort((a, b) => (a.cartNumber || 0) - (b.cartNumber || 0));
+  }, [run]);
+
+  const tempReadings = useMemo(() => {
+    return [...(run?.TempReadings || [])].sort((a, b) => new Date(a.readingAt) - new Date(b.readingAt));
+  }, [run]);
+
+  const packagingAnswers = useMemo(() => {
+    const q = run?.packagingAnswersJson;
+    return Array.isArray(q) ? q : [];
+  }, [run]);
+
+  if (loading) return (
+    <div className="container mt-4 text-center text-muted py-5">
+      <div className="spinner-border spinner-border-sm me-2" /> Loading run…
+    </div>
+  );
+
+  if (!run && !loading) return (
+    <div className="container mt-4">
+      <div className="alert alert-danger">Run not found.</div>
+      <Link className="btn btn-outline-secondary" to="/ccp/baking/queue">← Back to Queue</Link>
+    </div>
+  );
+
+  return (
+    <div className="container mt-4 pb-5">
+
+      {/* Header */}
+      <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+        <div>
+          <Link className="text-muted" style={{ fontSize: 13 }} to="/ccp/baking/queue">
+            ← Back to Queue
+          </Link>
+          <h3 className="mb-0 mt-1">
+            QA Review — {run.Batch?.lotCode || `Batch #${run.batchId}`}
+          </h3>
+          <div className="text-muted" style={{ fontSize: 13 }}>
+            {run.Product?.name} · Production date: {formatDate(run.Batch?.production_date)}
+          </div>
+        </div>
+        <div className="d-flex gap-2 align-items-center">
+          {isLocked && (
+            <span className="badge bg-success" style={{ fontSize: 13, padding: '8px 12px' }}>
+              ✓ VERIFIED
+            </span>
+          )}
+          {!isLocked && (
+            <span className="badge bg-warning text-dark" style={{ fontSize: 13, padding: '8px 12px' }}>
+              PENDING VERIFICATION
+            </span>
+          )}
+        </div>
+      </div>
+
+      {error && <div className="alert alert-danger">{error}</div>}
+      {successMsg && <div className="alert alert-success">{successMsg}</div>}
+
+      <div className="row g-3">
+
+        {/* ── Run summary card ── */}
+        <div className="col-12 col-lg-6">
+          <div className="card h-100">
+            <div className="card-body">
+              <h6 className="card-title text-muted mb-3">Run Summary</h6>
+              <table className="table table-sm table-borderless mb-0">
+                <tbody>
+                  <tr>
+                    <td className="text-muted" style={{ width: 160 }}>Status</td>
+                    <td><strong>{run.status}</strong></td>
+                  </tr>
+                  <tr>
+                    <td className="text-muted">Lot Code</td>
+                    <td><strong>{run.Batch?.lotCode || '—'}</strong></td>
+                  </tr>
+                  <tr>
+                    <td className="text-muted">FG Lot Code</td>
+                    <td>{run.finishedGoodsLotCode || '—'}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-muted">Prod. Date</td>
+                    <td>{formatDate(run.Batch?.production_date)}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-muted">Baking Started</td>
+                    <td>{formatDateTime(run.bakingStartedAt)}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-muted">Baking Stopped</td>
+                    <td>{formatDateTime(run.bakingStoppedAt)}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-muted">Oven Temp (start)</td>
+                    <td><strong>{run.ovenTempStartF ? `${run.ovenTempStartF}°F` : '—'}</strong></td>
+                  </tr>
+                  <tr>
+                    <td className="text-muted">Completed At</td>
+                    <td>{formatDateTime(run.completedAt)}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-muted">Completed By</td>
+                    <td>{run.CompletedBy?.username || '—'}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-muted">Record Owner</td>
+                    <td>{run.RecordOwner?.username || '—'}</td>
+                  </tr>
+                  {isLocked && (
+                    <>
+                      <tr>
+                        <td className="text-muted">Verified At</td>
+                        <td>{formatDateTime(run.verifiedAt)}</td>
+                      </tr>
+                      <tr>
+                        <td className="text-muted">Verified By</td>
+                        <td><strong className="text-success">{run.VerifiedBy?.username || '—'}</strong></td>
+                      </tr>
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Temperature readings card ── */}
+        <div className="col-12 col-lg-6">
+          <div className="card h-100">
+            <div className="card-body">
+              <h6 className="card-title text-muted mb-3">
+                Temperature Readings ({tempReadings.length})
+              </h6>
+              {tempReadings.length === 0 ? (
+                <div className="text-muted" style={{ fontSize: 13 }}>No readings recorded.</div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-sm align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Time</th>
+                        <th>Temp (°F)</th>
+                        <th>Cart</th>
+                        <th>Type</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tempReadings.map((t, idx) => (
+                        <tr key={t.id}>
+                          <td>{idx + 1}</td>
+                          <td style={{ fontSize: 12 }}>
+                            {new Date(t.readingAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td><strong>{t.tempF}°F</strong></td>
+                          <td>{t.cartId ? `#${t.cartId}` : '—'}</td>
+                          <td style={{ fontSize: 11 }} className="text-muted">{t.readingType || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Carts card ── */}
+        <div className="col-12">
+          <div className="card">
+            <div className="card-body">
+              <h6 className="card-title text-muted mb-3">
+                Carts ({carts.length})
+              </h6>
+              <div className="table-responsive">
+                <table className="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 80 }}>Cart</th>
+                      <th>Product</th>
+                      <th>Units</th>
+                      <th>Oven Out</th>
+                      <th>Blast In</th>
+                      <th>Blast Out</th>
+                      <th>Freezer Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {carts.length === 0 ? (
+                      <tr><td colSpan={7} className="text-muted">No carts recorded.</td></tr>
+                    ) : carts.map(c => {
+                      const blastIn = c.blastInAt ? new Date(c.blastInAt) : null;
+                      const blastOut = c.blastOutAt ? new Date(c.blastOutAt) : null;
+                      const freezerMins = blastIn && blastOut
+                        ? Math.round((blastOut - blastIn) / 60000)
+                        : null;
+                      const prodName = c.Product?.name || `Product #${c.productId}`;
+                      return (
+                        <tr key={c.id}>
+                          <td style={{ fontWeight: 900 }}>#{c.cartNumber}</td>
+                          <td>{prodName}</td>
+                          <td>{c.unitsInCart ?? '—'}</td>
+                          <td style={{ fontSize: 12 }}>
+                            {c.ovenOutAt ? new Date(c.ovenOutAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+                          <td style={{ fontSize: 12 }}>
+                            {blastIn ? blastIn.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : (
+                              <span className="badge bg-danger">Missing</span>
+                            )}
+                          </td>
+                          <td style={{ fontSize: 12 }}>
+                            {blastOut ? blastOut.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : (
+                              <span className="badge bg-danger">Missing</span>
+                            )}
+                          </td>
+                          <td style={{ fontSize: 12 }}>
+                            {freezerMins != null ? `${freezerMins} min` : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Ingredient Lot Codes ── */}
+        <div className="col-12">
+          <div className="card">
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                  <h6 className="card-title text-muted mb-0">Ingredient Lot Codes</h6>
+                  {!isLocked && (
+                    <div className="text-muted mt-1" style={{ fontSize: 12 }}>
+                      Review and complete all ingredient lot codes and quantities before verifying.
+                    </div>
+                  )}
+                </div>
+                {!isLocked && (
+                  <button
+                    className={`btn btn-sm ${ingredientsSaved ? 'btn-success' : 'btn-outline-primary'}`}
+                    onClick={saveIngredients}
+                    disabled={savingIngredients || loadingIngredients}
+                    style={{ minWidth: 120 }}
+                  >
+                    {savingIngredients ? 'Saving…' : ingredientsSaved ? '✓ Saved' : 'Save Changes'}
+                  </button>
+                )}
+              </div>
+
+              {loadingIngredients ? (
+                <div className="text-muted" style={{ fontSize: 13 }}>
+                  <span className="spinner-border spinner-border-sm me-2" />Loading ingredients…
+                </div>
+              ) : ingredients.length === 0 ? (
+                <div className="alert alert-warning mb-0" style={{ fontSize: 13 }}>
+                  ⚠ No ingredients found for this batch. They may not have been entered during production.
+                </div>
+              ) : (
+                <>
+                  <div className="table-responsive">
+                    <table className="table table-sm align-middle mb-0">
+                      <thead>
+                        <tr>
+                          <th style={{ minWidth: 160 }}>Ingredient</th>
+                          <th style={{ minWidth: 180 }}>Lot Code</th>
+                          <th style={{ minWidth: 110 }}>Quantity</th>
+                          <th style={{ width: 80 }}>Unit</th>
+                          <th style={{ width: 100 }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ingredients.map((ing, idx) => {
+                          const statusColor = { ENTERED: 'success', MISSING: 'danger', EXCLUDED: 'secondary' };
+                          return (
+                            <tr key={ing.id}>
+                              <td style={{ fontWeight: 700 }}>
+                                {ing.Ingredient?.name || `Ingredient #${ing.ingredientId}`}
+                              </td>
+                              <td>
+                                {isLocked ? (
+                                  <span className={!ing.ingredientLotCode ? 'text-danger' : ''}>
+                                    {ing.ingredientLotCode || '—'}
+                                  </span>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    className={`form-control form-control-sm ${!ing.ingredientLotCode ? 'border-danger' : ''}`}
+                                    value={ing.ingredientLotCode || ''}
+                                    placeholder="Enter lot code"
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setIngredients(prev => prev.map((x, i) =>
+                                        i === idx ? { ...x, ingredientLotCode: val } : x
+                                      ));
+                                      setIngredientsSaved(false);
+                                    }}
+                                  />
+                                )}
+                              </td>
+                              <td>
+                                {isLocked ? (
+                                  <span>{ing.quantityInput != null ? ing.quantityInput : '—'} {ing.uomInput || ''}</span>
+                                ) : (
+                                  <input
+                                    type="number"
+                                    className="form-control form-control-sm"
+                                    value={ing.quantityInput != null ? ing.quantityInput : ''}
+                                    min={0}
+                                    step="0.01"
+                                    placeholder="0"
+                                    onChange={e => {
+                                      const val = e.target.value === '' ? null : e.target.value;
+                                      setIngredients(prev => prev.map((x, i) =>
+                                        i === idx ? { ...x, quantityInput: val } : x
+                                      ));
+                                      setIngredientsSaved(false);
+                                    }}
+                                  />
+                                )}
+                              </td>
+                              <td>
+                                {isLocked ? (
+                                  <span>{ing.uomInput || '—'}</span>
+                                ) : (
+                                  <select
+                                    className="form-select form-select-sm"
+                                    value={ing.uomInput || 'lb'}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setIngredients(prev => prev.map((x, i) =>
+                                        i === idx ? { ...x, uomInput: val } : x
+                                      ));
+                                      setIngredientsSaved(false);
+                                    }}
+                                  >
+                                    <option value="lb">lb</option>
+                                    <option value="kg">kg</option>
+                                  </select>
+                                )}
+                              </td>
+                              <td>
+                                <span className={`badge bg-${statusColor[ing.status] || 'secondary'}`}>
+                                  {ing.status}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Summary badges */}
+                  <div className="d-flex gap-2 mt-3 flex-wrap">
+                    {['ENTERED', 'MISSING', 'EXCLUDED'].map(s => {
+                      const count = ingredients.filter(i => i.status === s).length;
+                      if (count === 0) return null;
+                      const color = { ENTERED: 'success', MISSING: 'danger', EXCLUDED: 'secondary' };
+                      return (
+                        <span key={s} className={`badge bg-${color[s]}`} style={{ fontSize: 12 }}>
+                          {count} {s}
+                        </span>
+                      );
+                    })}
+                  </div>
+
+                  {/* Missing warning */}
+                  {!isLocked && ingredients.some(i => i.status === 'MISSING') && (
+                    <div className="alert alert-warning mt-3 mb-0" style={{ fontSize: 13 }}>
+                      ⚠ <strong>{ingredients.filter(i => i.status === 'MISSING').length} ingredient(s)</strong> still have a missing lot code.
+                      You can still verify, but missing ingredients will be flagged in the record.
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Packaging checklist answers ── */}
+        {packagingAnswers.length > 0 && (
+          <div className="col-12 col-lg-6">
+            <div className="card h-100">
+              <div className="card-body">
+                <h6 className="card-title text-muted mb-3">Packaging Checklist</h6>
+                {packagingAnswers.map((a, idx) => (
+                  <div key={idx} className="d-flex justify-content-between align-items-start border-bottom py-2" style={{ fontSize: 13 }}>
+                    <span>{a.question}</span>
+                    <span className="ms-3" style={{ minWidth: 60, textAlign: 'right', fontWeight: 700 }}>
+                      {a.type === 'CHECK'
+                        ? (a.value === true ? <span className="text-success">✓ Yes</span> : <span className="text-danger">✗ No</span>)
+                        : String(a.value ?? '—')
+                      }
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Editable QA fields ── */}
+        <div className={`col-12 ${packagingAnswers.length > 0 ? 'col-lg-6' : ''}`}>
+          <div className="card h-100">
+            <div className="card-body">
+              <h6 className="card-title text-muted mb-3">
+                Production Quantities
+                {!isLocked && <span className="text-muted ms-2" style={{ fontSize: 11, fontWeight: 400 }}>Editable before verification</span>}
+              </h6>
+
+              <table className="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th style={{ width: 160 }}>Units</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productTotals.length === 0 ? (
+                    <tr><td colSpan={2} className="text-muted">No product totals recorded.</td></tr>
+                  ) : (
+                    <>
+                      {productTotals.map((r, idx) => (
+                        <tr key={r.productId}>
+                          <td style={{ fontWeight: 700 }}>{r.name}</td>
+                          <td>
+                            {isLocked ? (
+                              <span style={{ fontWeight: 900 }}>{r.units}</span>
+                            ) : (
+                              <input
+                                type="number"
+                                className="form-control form-control-sm"
+                                value={r.units}
+                                min={0}
+                                onChange={(e) => {
+                                  const val = e.target.value === '' ? '' : Number(e.target.value);
+                                  setProductTotals(prev =>
+                                    prev.map((x, i) => i === idx ? { ...x, units: val } : x)
+                                  );
+                                }}
+                              />
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td style={{ fontWeight: 900 }}>TOTAL</td>
+                        <td style={{ fontWeight: 900 }}>{editedTotal}</td>
+                      </tr>
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Deviation & notes ── */}
+        <div className="col-12">
+          <div className="card">
+            <div className="card-body">
+              <h6 className="card-title text-muted mb-3">Deviation & Notes</h6>
+
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="qaDeviation"
+                  checked={deviation}
+                  onChange={e => setDeviation(e.target.checked)}
+                  disabled={isLocked}
+                />
+                <label className="form-check-label" htmlFor="qaDeviation">
+                  Deviation occurred
+                </label>
+              </div>
+
+              {deviation && (
+                <div className="row g-2 mb-3">
+                  <div className="col-12 col-md-6">
+                    <label className="form-label mb-1">Deviation Notes</label>
+                    <textarea
+                      className="form-control"
+                      rows={3}
+                      value={deviationNotes}
+                      onChange={e => setDeviationNotes(e.target.value)}
+                      disabled={isLocked}
+                    />
+                  </div>
+                  <div className="col-12 col-md-6">
+                    <label className="form-label mb-1">Corrective Action Notes</label>
+                    <textarea
+                      className="form-control"
+                      rows={3}
+                      value={correctiveNotes}
+                      onChange={e => setCorrectiveNotes(e.target.value)}
+                      disabled={isLocked}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="form-label mb-1">QA Notes (optional)</label>
+                <textarea
+                  className="form-control"
+                  rows={2}
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  disabled={isLocked}
+                  placeholder="Any additional observations from QA review…"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Verify button ── */}
+        {!isLocked && (
+          <div className="col-12">
+            <div className="card border-success">
+              <div className="card-body">
+                <div className="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                  <div>
+                    <div style={{ fontWeight: 900, fontSize: 16 }}>Ready to verify?</div>
+                    <div className="text-muted" style={{ fontSize: 13 }}>
+                      This will lock the run and create the production log entries. This action cannot be undone.
+                    </div>
+                    {editedTotal === 0 && (
+                      <div className="text-danger mt-1" style={{ fontSize: 13 }}>
+                        ⚠ Total units is 0 — review product quantities before verifying.
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    className="btn btn-success btn-lg"
+                    style={{ fontWeight: 900, minWidth: 180 }}
+                    onClick={() => setShowConfirm(true)}
+                    disabled={submitting || editedTotal === 0}
+                  >
+                    {submitting ? 'Verifying…' : 'VERIFY & LOCK'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>{/* end row */}
+
+      {/* ── Confirm modal ── */}
+      {showConfirm && (
+        <div className="modal d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.55)' }}>
+          <div className="modal-dialog modal-dialog-centered" role="document">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Confirm Verification</h5>
+                <button className="btn-close" onClick={() => setShowConfirm(false)} />
+              </div>
+              <div className="modal-body">
+                <p>You are about to verify and lock batch <strong>{run.Batch?.lotCode}</strong>.</p>
+                <p>This will:</p>
+                <ul>
+                  <li>Lock the run permanently (no further edits)</li>
+                  <li>Create production log entries for <strong>{editedTotal} total units</strong></li>
+                </ul>
+                {deviation && (
+                  <div className="alert alert-warning" style={{ fontSize: 13 }}>
+                    ⚠ This batch has a <strong>deviation</strong> recorded. Make sure notes are complete.
+                  </div>
+                )}
+                <p className="mb-0 text-muted" style={{ fontSize: 13 }}>This action cannot be undone.</p>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-outline-secondary" onClick={() => setShowConfirm(false)} disabled={submitting}>
+                  Cancel
+                </button>
+                <button className="btn btn-success" onClick={doVerify} disabled={submitting}>
+                  {submitting ? 'Verifying…' : 'Confirm & Verify'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

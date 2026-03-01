@@ -235,7 +235,11 @@ export default function BakingCcpVerifyPage() {
 
   const formatDate = (d) => {
     if (!d) return '—';
-    return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    // Plain YYYY-MM-DD strings are parsed as UTC midnight by new Date(), which
+    // rolls back one day in negative-offset timezones. Appending T00:00:00
+    // forces the date to be interpreted in local time instead.
+    const normalized = /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d}T00:00:00` : d;
+    return new Date(normalized).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const carts = useMemo(() => {

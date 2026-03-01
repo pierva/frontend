@@ -269,12 +269,77 @@ export default function BakingCcpVerifyPage() {
   );
 
   return (
-    <div className="container mt-4 pb-5">
+    <>
+    <style>{`
+      @media print {
+        /* Hide everything by default */
+        body * { visibility: hidden; }
+
+        /* Show only the report content */
+        .sqf-report, .sqf-report * { visibility: visible; }
+        .sqf-report { position: absolute; top: 0; left: 0; width: 100%; }
+
+        /* Hide interactive / nav elements even inside the report */
+        .no-print { display: none !important; }
+
+        /* Typography & layout */
+        .sqf-report { font-size: 11pt; font-family: Arial, sans-serif; }
+        .sqf-report h3 { font-size: 15pt; margin-bottom: 2pt; }
+        .sqf-report h6 { font-size: 10pt; text-transform: uppercase;
+                         letter-spacing: 0.05em; color: #555; margin-bottom: 6pt; }
+        .sqf-report .card { border: 1px solid #ccc !important;
+                            page-break-inside: avoid; margin-bottom: 10pt; }
+        .sqf-report .card-body { padding: 8pt 10pt; }
+        .sqf-report table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+        .sqf-report th, .sqf-report td { border: 1px solid #ddd;
+                                          padding: 3pt 5pt; text-align: left; }
+        .sqf-report th { background: #f5f5f5; font-weight: bold; }
+        .sqf-report .badge { border: 1px solid #999; padding: 1pt 4pt;
+                              font-size: 9pt; background: transparent !important;
+                              color: #000 !important; }
+
+        /* Print header with company + report title */
+        .print-header { display: block !important; }
+
+        /* Page breaks */
+        .page-break-before { page-break-before: always; }
+
+        /* Two-column layout collapses to single column */
+        .row { display: block !important; }
+        .col-12, .col-lg-6 { width: 100% !important; max-width: 100% !important;
+                              display: block !important; }
+
+        /* Ensure status badge colours render in print */
+        .bg-success { background-color: #d4edda !important; }
+        .bg-danger  { background-color: #f8d7da !important; }
+        .bg-warning { background-color: #fff3cd !important; }
+        .bg-secondary { background-color: #e2e3e5 !important; }
+      }
+
+      /* Force full paper width — override Bootstrap container */
+      .sqf-report.container,
+      .sqf-report.container-sm,
+      .sqf-report.container-md,
+      .sqf-report.container-lg,
+      .sqf-report.container-xl,
+      .sqf-report.container-xxl {
+        max-width: 100% !important;
+        width: 100% !important;
+        padding-left: 12pt !important;
+        padding-right: 12pt !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+      }
+
+      /* Print header hidden on screen */
+      .print-header { display: none; }
+    `}</style>
+    <div className="container mt-4 pb-5 sqf-report">
 
       {/* Header */}
       <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
         <div>
-          <Link className="text-muted" style={{ fontSize: 13 }} to="/ccp/baking/queue">
+          <Link className="text-muted no-print" style={{ fontSize: 13 }} to="/ccp/baking/queue">
             ← Back to Queue
           </Link>
           <h3 className="mb-0 mt-1">
@@ -286,9 +351,18 @@ export default function BakingCcpVerifyPage() {
         </div>
         <div className="d-flex gap-2 align-items-center">
           {isLocked && (
-            <span className="badge bg-success" style={{ fontSize: 13, padding: '8px 12px' }}>
-              ✓ VERIFIED
-            </span>
+            <>
+              <span className="badge bg-success" style={{ fontSize: 13, padding: '8px 12px' }}>
+                ✓ VERIFIED
+              </span>
+              <button
+                className="btn btn-outline-secondary btn-sm no-print"
+                onClick={() => window.print()}
+                title="Print or save as PDF"
+              >
+                🖨 Print / Export PDF
+              </button>
+            </>
           )}
           {!isLocked && (
             <span className="badge bg-warning text-dark" style={{ fontSize: 13, padding: '8px 12px' }}>
@@ -298,7 +372,26 @@ export default function BakingCcpVerifyPage() {
         </div>
       </div>
 
-      {error && <div className="alert alert-danger">{error}</div>}
+      {/* Print-only header */}
+      <div className="print-header mb-3 pb-2" style={{ borderBottom: '2px solid #1b2638' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontWeight: 900, fontSize: 18, color: '#1b2638' }}>PIZZACINI — SQF Baking CCP Record</div>
+            <div style={{ fontSize: 12, color: '#555', marginTop: 2 }}>
+              Lot: {run?.Batch?.lotCode || '—'} &nbsp;|&nbsp;
+              FG Lot: {run?.finishedGoodsLotCode || '—'} &nbsp;|&nbsp;
+              Prod. Date: {formatDate(run?.Batch?.production_date)}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right', fontSize: 11, color: '#555' }}>
+            <div>Verified: {formatDateTime(run?.verifiedAt)}</div>
+            <div>By: {run?.VerifiedBy?.username || '—'}</div>
+            <div style={{ marginTop: 4, fontWeight: 700, color: '#155724' }}>✓ VERIFIED &amp; LOCKED</div>
+          </div>
+        </div>
+      </div>
+
+      {error && <div className="alert alert-danger no-print">{error}</div>}
       {successMsg && <div className="alert alert-success">{successMsg}</div>}
 
       <div className="row g-3">
@@ -917,5 +1010,6 @@ export default function BakingCcpVerifyPage() {
       )}
 
     </div>
+    </>
   );
 }

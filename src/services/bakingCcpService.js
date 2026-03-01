@@ -121,6 +121,22 @@ const getBatchIngredients = async (batchId) => {
   return res.data;
 };
 
+// ✅ QA: add a single new ingredient row to a batch
+const addBatchIngredient = async (batchId, ingredient) => {
+  const res = await axios.post(`${API_URL}/api/logs/${batchId}/ingredients`, { ingredient }, {
+    headers: authHeaders(),
+  });
+  return res.data;
+};
+
+// ✅ QA: delete a single ingredient row from a batch
+const deleteBatchIngredient = async (batchId, ingredientLotCodeId) => {
+  const res = await axios.delete(`${API_URL}/api/logs/${batchId}/ingredients/${ingredientLotCodeId}`, {
+    headers: authHeaders(),
+  });
+  return res.data;
+};
+
 // ✅ QA: bulk-update ingredient lot codes before verifying
 const updateBatchIngredients = async (batchId, ingredients) => {
   const res = await axios.put(`${API_URL}/api/logs/${batchId}/ingredients`, { ingredients }, {
@@ -190,6 +206,8 @@ const bakingCcpService = {
   verifyAndLog,
   getBatchIngredients,
   updateBatchIngredients,
+  addBatchIngredient,
+  deleteBatchIngredient,
   addTempReading,
   createCart,
   markCartBlastIn,

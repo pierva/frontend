@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import bakingCcpService from '../../services/bakingCcpService';
+import ingredientService from '../../services/ingredientService';
 
 export default function BakingCcpVerifyPage() {
   const { runId } = useParams();
@@ -26,6 +27,8 @@ export default function BakingCcpVerifyPage() {
   const [loadingIngredients, setLoadingIngredients] = useState(false);
   const [savingIngredients, setSavingIngredients] = useState(false);
   const [ingredientsSaved, setIngredientsSaved] = useState(false);
+  const [newRow, setNewRow] = useState({ ingredientId: '', ingredientLotCode: '', quantityInput: '', uomInput: 'lb' });
+  const [allIngredients, setAllIngredients] = useState([]);
 
   // Confirm modal
   const [showConfirm, setShowConfirm] = useState(false);
@@ -92,6 +95,9 @@ export default function BakingCcpVerifyPage() {
 
   useEffect(() => {
     fetchRun();
+    ingredientService.getIngredients()
+      .then(data => setAllIngredients(Array.isArray(data) ? data : []))
+      .catch(() => setAllIngredients([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
 
@@ -144,6 +150,57 @@ export default function BakingCcpVerifyPage() {
     }
   };
 
+  const addIngredientRow = async () => {
+    if (!newRow.ingredientId) return;
+    const targetBatchId = loadedBatchId ?? run?.batchId;
+    if (!targetBatchId) return;
+
+    const uom = newRow.uomInput || 'lb';
+    const qInput = newRow.quantityInput !== '' ? Number(newRow.quantityInput) : null;
+    const qKg = (qInput != null && Number.isFinite(qInput) && qInput > 0) ? toKg(qInput, uom) : null;
+    const lot = (newRow.ingredientLotCode || '').trim();
+    const status = lot ? (qKg != null ? 'ENTERED' : 'EXCLUDED') : 'MISSING';
+
+    // Find the ingredient name from the run's product ingredient list
+    const existingMatch = ingredients.find(i => Number(i.ingredientId) === Number(newRow.ingredientId));
+    const ingredientName = existingMatch?.Ingredient?.name || `Ingredient #${newRow.ingredientId}`;
+
+    try {
+      setSavingIngredients(true);
+      const res = await bakingCcpService.addBatchIngredient(targetBatchId, {
+        ingredientId: Number(newRow.ingredientId),
+        ingredientLotCode: lot || null,
+        quantityInput: qInput,
+        uomInput: uom,
+        quantityKg: qKg,
+        status,
+      });
+      // Refresh from server
+      await fetchIngredients(targetBatchId);
+      setNewRow({ ingredientId: '', ingredientLotCode: '', quantityInput: '', uomInput: 'lb' });
+      setIngredientsSaved(false);
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to add ingredient.');
+    } finally {
+      setSavingIngredients(false);
+    }
+  };
+
+  const removeIngredientRow = async (ing) => {
+    const targetBatchId = loadedBatchId ?? run?.batchId;
+    if (!targetBatchId) return;
+    if (!window.confirm(`Remove ${ing.Ingredient?.name || 'this ingredient'}${ing.ingredientLotCode ? ` (${ing.ingredientLotCode})` : ''} from this batch?`)) return;
+    try {
+      setSavingIngredients(true);
+      await bakingCcpService.deleteBatchIngredient(targetBatchId, ing.id);
+      await fetchIngredients(targetBatchId);
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to remove ingredient.');
+    } finally {
+      setSavingIngredients(false);
+    }
+  };
+
   const doVerify = async () => {
     setShowConfirm(false);
     setError('');
@@ -157,6 +214,8 @@ export default function BakingCcpVerifyPage() {
         correctiveActionNotes: correctiveNotes,
       });
       setSuccessMsg('Run verified and production log created successfully.');
+      // Refresh navbar QA badge count
+      window.dispatchEvent(new Event('productionStatusChanged'));
       setTimeout(() => navigate('/ccp/baking/queue'), 1800);
     } catch (e) {
       console.error(e);
@@ -436,124 +495,208 @@ export default function BakingCcpVerifyPage() {
                 <div className="text-muted" style={{ fontSize: 13 }}>
                   <span className="spinner-border spinner-border-sm me-2" />Loading ingredients…
                 </div>
-              ) : ingredients.length === 0 ? (
-                <div className="alert alert-warning mb-0" style={{ fontSize: 13 }}>
-                  ⚠ No ingredients found for this batch. They may not have been entered during production.
-                </div>
               ) : (
                 <>
-                  <div className="table-responsive">
-                    <table className="table table-sm align-middle mb-0">
-                      <thead>
-                        <tr>
-                          <th style={{ minWidth: 160 }}>Ingredient</th>
-                          <th style={{ minWidth: 180 }}>Lot Code</th>
-                          <th style={{ minWidth: 110 }}>Quantity</th>
-                          <th style={{ width: 80 }}>Unit</th>
-                          <th style={{ width: 100 }}>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ingredients.map((ing, idx) => {
-                          const statusColor = { ENTERED: 'success', MISSING: 'danger', EXCLUDED: 'secondary' };
-                          return (
-                            <tr key={ing.id}>
-                              <td style={{ fontWeight: 700 }}>
-                                {ing.Ingredient?.name || `Ingredient #${ing.ingredientId}`}
-                              </td>
-                              <td>
-                                {isLocked ? (
-                                  <span className={!ing.ingredientLotCode ? 'text-danger' : ''}>
-                                    {ing.ingredientLotCode || '—'}
-                                  </span>
-                                ) : (
-                                  <input
-                                    type="text"
-                                    className={`form-control form-control-sm ${!ing.ingredientLotCode ? 'border-danger' : ''}`}
-                                    value={ing.ingredientLotCode || ''}
-                                    placeholder="Enter lot code"
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      setIngredients(prev => prev.map((x, i) =>
-                                        i === idx ? { ...x, ingredientLotCode: val } : x
-                                      ));
-                                      setIngredientsSaved(false);
-                                    }}
-                                  />
-                                )}
-                              </td>
-                              <td>
-                                {isLocked ? (
-                                  <span>{ing.quantityInput != null ? ing.quantityInput : '—'} {ing.uomInput || ''}</span>
-                                ) : (
-                                  <input
-                                    type="number"
-                                    className="form-control form-control-sm"
-                                    value={ing.quantityInput != null ? ing.quantityInput : ''}
-                                    min={0}
-                                    step="0.01"
-                                    placeholder="0"
-                                    onChange={e => {
-                                      const val = e.target.value === '' ? null : e.target.value;
-                                      setIngredients(prev => prev.map((x, i) =>
-                                        i === idx ? { ...x, quantityInput: val } : x
-                                      ));
-                                      setIngredientsSaved(false);
-                                    }}
-                                  />
-                                )}
-                              </td>
-                              <td>
-                                {isLocked ? (
-                                  <span>{ing.uomInput || '—'}</span>
-                                ) : (
-                                  <select
-                                    className="form-select form-select-sm"
-                                    value={ing.uomInput || 'lb'}
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      setIngredients(prev => prev.map((x, i) =>
-                                        i === idx ? { ...x, uomInput: val } : x
-                                      ));
-                                      setIngredientsSaved(false);
-                                    }}
-                                  >
-                                    <option value="lb">lb</option>
-                                    <option value="kg">kg</option>
-                                  </select>
-                                )}
-                              </td>
-                              <td>
-                                <span className={`badge bg-${statusColor[ing.status] || 'secondary'}`}>
-                                  {ing.status}
-                                </span>
-                              </td>
+                  {/* Table — shown when there are rows, empty state otherwise */}
+                  {ingredients.length === 0 ? (
+                    <div className={`alert mb-3 ${isLocked ? 'alert-secondary' : 'alert-warning'}`} style={{ fontSize: 13 }}>
+                      {isLocked
+                        ? 'No ingredients were recorded for this batch.'
+                        : '⚠ No ingredients yet. Use the form below to add them.'}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="table-responsive">
+                        <table className="table table-sm align-middle mb-0">
+                          <thead>
+                            <tr>
+                              <th style={{ minWidth: 160 }}>Ingredient</th>
+                              <th style={{ minWidth: 180 }}>Lot Code</th>
+                              <th style={{ minWidth: 110 }}>Quantity</th>
+                              <th style={{ width: 80 }}>Unit</th>
+                              <th style={{ width: 100 }}>Status</th>
+                              {!isLocked && <th style={{ width: 50 }}></th>}
                             </tr>
+                          </thead>
+                          <tbody>
+                            {ingredients.map((ing, idx) => {
+                              const statusColor = { ENTERED: 'success', MISSING: 'danger', EXCLUDED: 'secondary' };
+                              return (
+                                <tr key={ing.id}>
+                                  <td style={{ fontWeight: 700 }}>
+                                    {ing.Ingredient?.name || `Ingredient #${ing.ingredientId}`}
+                                  </td>
+                                  <td>
+                                    {isLocked ? (
+                                      <span className={!ing.ingredientLotCode ? 'text-danger' : ''}>
+                                        {ing.ingredientLotCode || '—'}
+                                      </span>
+                                    ) : (
+                                      <input
+                                        type="text"
+                                        className={`form-control form-control-sm ${!ing.ingredientLotCode ? 'border-danger' : ''}`}
+                                        value={ing.ingredientLotCode || ''}
+                                        placeholder="Enter lot code"
+                                        onChange={e => {
+                                          const val = e.target.value;
+                                          setIngredients(prev => prev.map((x, i) =>
+                                            i === idx ? { ...x, ingredientLotCode: val } : x
+                                          ));
+                                          setIngredientsSaved(false);
+                                        }}
+                                      />
+                                    )}
+                                  </td>
+                                  <td>
+                                    {isLocked ? (
+                                      <span>{ing.quantityInput != null ? ing.quantityInput : '—'} {ing.uomInput || ''}</span>
+                                    ) : (
+                                      <input
+                                        type="number"
+                                        className="form-control form-control-sm"
+                                        value={ing.quantityInput != null ? ing.quantityInput : ''}
+                                        min={0}
+                                        step="0.01"
+                                        placeholder="0"
+                                        onChange={e => {
+                                          const val = e.target.value === '' ? null : e.target.value;
+                                          setIngredients(prev => prev.map((x, i) =>
+                                            i === idx ? { ...x, quantityInput: val } : x
+                                          ));
+                                          setIngredientsSaved(false);
+                                        }}
+                                      />
+                                    )}
+                                  </td>
+                                  <td>
+                                    {isLocked ? (
+                                      <span>{ing.uomInput || '—'}</span>
+                                    ) : (
+                                      <select
+                                        className="form-select form-select-sm"
+                                        value={ing.uomInput || 'lb'}
+                                        onChange={e => {
+                                          const val = e.target.value;
+                                          setIngredients(prev => prev.map((x, i) =>
+                                            i === idx ? { ...x, uomInput: val } : x
+                                          ));
+                                          setIngredientsSaved(false);
+                                        }}
+                                      >
+                                        <option value="lb">lb</option>
+                                        <option value="kg">kg</option>
+                                      </select>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <span className={`badge bg-${statusColor[ing.status] || 'secondary'}`}>
+                                      {ing.status}
+                                    </span>
+                                  </td>
+                                  {!isLocked && (
+                                    <td>
+                                      <button
+                                        className="btn btn-outline-danger btn-sm"
+                                        style={{ padding: '1px 7px', fontSize: 16, lineHeight: 1 }}
+                                        onClick={() => removeIngredientRow(ing)}
+                                        disabled={savingIngredients}
+                                        title="Remove this ingredient row"
+                                      >
+                                        ×
+                                      </button>
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Summary badges */}
+                      <div className="d-flex gap-2 mt-3 flex-wrap">
+                        {['ENTERED', 'MISSING', 'EXCLUDED'].map(s => {
+                          const count = ingredients.filter(i => i.status === s).length;
+                          if (count === 0) return null;
+                          const color = { ENTERED: 'success', MISSING: 'danger', EXCLUDED: 'secondary' };
+                          return (
+                            <span key={s} className={`badge bg-${color[s]}`} style={{ fontSize: 12 }}>
+                              {count} {s}
+                            </span>
                           );
                         })}
-                      </tbody>
-                    </table>
-                  </div>
+                      </div>
 
-                  {/* Summary badges */}
-                  <div className="d-flex gap-2 mt-3 flex-wrap">
-                    {['ENTERED', 'MISSING', 'EXCLUDED'].map(s => {
-                      const count = ingredients.filter(i => i.status === s).length;
-                      if (count === 0) return null;
-                      const color = { ENTERED: 'success', MISSING: 'danger', EXCLUDED: 'secondary' };
-                      return (
-                        <span key={s} className={`badge bg-${color[s]}`} style={{ fontSize: 12 }}>
-                          {count} {s}
-                        </span>
-                      );
-                    })}
-                  </div>
+                      {/* Missing warning */}
+                      {!isLocked && ingredients.some(i => i.status === 'MISSING') && (
+                        <div className="alert alert-warning mt-3 mb-0" style={{ fontSize: 13 }}>
+                          ⚠ <strong>{ingredients.filter(i => i.status === 'MISSING').length} ingredient(s)</strong> still have a missing lot code.
+                          You can still verify, but missing ingredients will be flagged in the record.
+                        </div>
+                      )}
+                    </>
+                  )}
 
-                  {/* Missing warning */}
-                  {!isLocked && ingredients.some(i => i.status === 'MISSING') && (
-                    <div className="alert alert-warning mt-3 mb-0" style={{ fontSize: 13 }}>
-                      ⚠ <strong>{ingredients.filter(i => i.status === 'MISSING').length} ingredient(s)</strong> still have a missing lot code.
-                      You can still verify, but missing ingredients will be flagged in the record.
+                  {/* Add ingredient row — always visible when not locked */}
+                  {!isLocked && (
+                    <div className={`${ingredients.length > 0 ? 'border-top mt-3' : ''} pt-3`}>
+                      <div style={{ fontWeight: 700, fontSize: 13 }} className="mb-2">Add Ingredient</div>
+                      <div className="row g-2 align-items-end">
+                        <div className="col-12 col-md-3">
+                          <select
+                            className="form-select form-select-sm"
+                            value={newRow.ingredientId}
+                            onChange={e => setNewRow(r => ({ ...r, ingredientId: e.target.value }))}
+                          >
+                            <option value="">Select ingredient…</option>
+                            {allIngredients.map(i => (
+                              <option key={i.id} value={i.id}>{i.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-12 col-md-3">
+                          <input
+                            type="text"
+                            className="form-control form-control-sm"
+                            placeholder="Lot code"
+                            value={newRow.ingredientLotCode}
+                            onChange={e => setNewRow(r => ({ ...r, ingredientLotCode: e.target.value }))}
+                          />
+                        </div>
+                        <div className="col-6 col-md-2">
+                          <input
+                            type="number"
+                            className="form-control form-control-sm"
+                            placeholder="Qty"
+                            min={0}
+                            step="0.01"
+                            value={newRow.quantityInput}
+                            onChange={e => setNewRow(r => ({ ...r, quantityInput: e.target.value }))}
+                          />
+                        </div>
+                        <div className="col-3 col-md-1">
+                          <select
+                            className="form-select form-select-sm"
+                            value={newRow.uomInput}
+                            onChange={e => setNewRow(r => ({ ...r, uomInput: e.target.value }))}
+                          >
+                            <option value="lb">lb</option>
+                            <option value="kg">kg</option>
+                          </select>
+                        </div>
+                        <div className="col-3 col-md-2">
+                          <button
+                            className="btn btn-primary btn-sm w-100"
+                            onClick={addIngredientRow}
+                            disabled={!newRow.ingredientId || savingIngredients}
+                          >
+                            {savingIngredients ? '…' : '+ Add'}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-muted mt-1" style={{ fontSize: 11 }}>
+                        You can add the same ingredient multiple times with different lot codes.
+                      </div>
                     </div>
                   )}
                 </>

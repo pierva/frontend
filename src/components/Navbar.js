@@ -1,3 +1,5 @@
+// components/Navbar.js
+
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
@@ -119,6 +121,31 @@ function Navbar() {
     return () => { cancelled = true; };
   }, [isLoggedIn, perms.canStartProduction, location.pathname]);
 
+  // Re-poll active run when any page signals a production status change
+  // (e.g. live page completes run, verify page locks run)
+  useEffect(() => {
+    const handler = () => {
+      if (!isLoggedIn || !perms.canStartProduction) return;
+      bakingCcpService.getActiveRun()
+        .then(res => setActiveRunId(res?.run?.id ?? null))
+        .catch(() => setActiveRunId(null));
+    };
+    window.addEventListener('productionStatusChanged', handler);
+    return () => window.removeEventListener('productionStatusChanged', handler);
+  }, [isLoggedIn, perms.canStartProduction]);
+
+  // Also refresh QA badge count on status change
+  useEffect(() => {
+    const handler = () => {
+      if (!isLoggedIn || !perms.canReviewQA) return;
+      bakingCcpService.getRuns('COMPLETED')
+        .then(res => setPendingQACount(Array.isArray(res?.runs) ? res.runs.length : 0))
+        .catch(() => setPendingQACount(0));
+    };
+    window.addEventListener('productionStatusChanged', handler);
+    return () => window.removeEventListener('productionStatusChanged', handler);
+  }, [isLoggedIn, perms.canReviewQA]);
+
   // Fetch pending QA count for qa/admin
   useEffect(() => {
     let cancelled = false;
@@ -159,7 +186,7 @@ function Navbar() {
             <img src={logoUrl} alt="Company Logo" style={{ height: '40px', marginRight: '10px' }} />
             quickLOG
           </Link>
-        {/* Mobile collapse toggle (Bootstrap hamburger) */}
+
           <button
             className="navbar-toggler"
             type="button"

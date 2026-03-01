@@ -526,6 +526,8 @@ export default function BakingCcpLivePage() {
       setSuccessMsg('Production completed and sent to QA for verification.');
       setShowCompleteModal(false);
       fetchAll({ silent: true });
+          // Tell the navbar to refresh — run is no longer active
+      window.dispatchEvent(new Event('productionStatusChanged'));
     } catch (e) {
       console.error(e);
       setError(getServerMsg(e, 'Failed to complete production.'));

@@ -209,6 +209,7 @@ function AdminUserManagement() {
 
   // Permissions panel
   const [permUser, setPermUser] = useState(null); // user whose perms are open
+  const [showInactive, setShowInactive] = useState(false);
 
   const autoDismiss = useCallback((type) => {
     setTimeout(() => {
@@ -391,13 +392,13 @@ function AdminUserManagement() {
         </button>
       </div>
 
-      {/* ── Users Table ── */}
-      <div className="table-responsive">
+      {/* ── Active Users Table ── */}
+      <h5 className="mb-3">Active Users</h5>
+      <div className="table-responsive mb-4">
         <table className="table table-bordered align-middle">
           <thead className="table-light">
             <tr>
               <th>Username</th>
-              <th>Status</th>
               <th>Role</th>
               <th>Company</th>
               <th>Change Role</th>
@@ -407,14 +408,9 @@ function AdminUserManagement() {
             </tr>
           </thead>
           <tbody>
-            {users.map(user => (
-              <tr key={user.id} style={{ opacity: user.isActive === false ? 0.5 : 1 }}>
+            {users.filter(u => u.isActive !== false).map(user => (
+              <tr key={user.id}>
                 <td style={{ fontWeight: 600 }}>{user.username}</td>
-                <td>
-                  <span className={`badge ${user.isActive === false ? 'bg-secondary' : 'bg-success'}`}>
-                    {user.isActive === false ? 'Inactive' : 'Active'}
-                  </span>
-                </td>
                 <td>
                   <span className={`badge ${
                     user.role === 'admin' ? 'bg-danger' :
@@ -474,11 +470,11 @@ function AdminUserManagement() {
                 </td>
                 <td>
                   <button
-                    className={`btn btn-sm ${user.isActive === false ? 'btn-outline-success' : 'btn-outline-danger'}`}
-                    onClick={() => handleToggleActive(user.id, user.isActive !== false)}
+                    className="btn btn-sm btn-outline-danger"
+                    onClick={() => handleToggleActive(user.id, true)}
                     disabled={loggedAdmin?.id === user.id}
                   >
-                    {user.isActive === false ? 'Activate' : 'Deactivate'}
+                    Deactivate
                   </button>
                 </td>
               </tr>
@@ -486,6 +482,59 @@ function AdminUserManagement() {
           </tbody>
         </table>
       </div>
+
+      {/* ── Deactivated Users ── */}
+      {users.some(u => u.isActive === false) && (
+        <div className="mb-4">
+          <button
+            className="btn btn-outline-secondary btn-sm mb-3"
+            onClick={() => setShowInactive(v => !v)}
+          >
+            {showInactive ? '▲ Hide' : '▼ Show'} Deactivated Users ({users.filter(u => u.isActive === false).length})
+          </button>
+          {showInactive && (
+            <div className="table-responsive">
+              <table className="table table-bordered align-middle" style={{ opacity: 0.75 }}>
+                <thead className="table-light">
+                  <tr>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Company</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.filter(u => u.isActive === false).map(user => (
+                    <tr key={user.id}>
+                      <td style={{ fontWeight: 600, color: '#6c757d' }}>{user.username}</td>
+                      <td>
+                        <span className={`badge ${
+                          user.role === 'admin' ? 'bg-danger' :
+                          user.role === 'qa' ? 'bg-warning text-dark' :
+                          user.role === 'factory_team' ? 'bg-primary' : 'bg-secondary'
+                        }`} style={{ opacity: 0.6 }}>
+                          {roleLabel(user.role)}
+                        </span>
+                      </td>
+                      <td style={{ color: '#6c757d' }}>
+                        {user.role === 'admin' ? '—' : user.Company?.name || 'Not assigned'}
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-sm btn-outline-success"
+                          onClick={() => handleToggleActive(user.id, false)}
+                        >
+                          Activate
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Permissions Panel Modal ── */}
       {permUser && (

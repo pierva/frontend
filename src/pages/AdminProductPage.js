@@ -101,6 +101,9 @@ function AdminProductPage() {
   const [ingredientName, setIngredientName] = useState('');
   const [manufacturer, setManufacturer] = useState('');
   const [editIngredient, setEditIngredient] = useState(null);
+  const [priceHistory, setPriceHistory] = useState([]);
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  const [newPrice, setNewPrice] = useState({ pricePerKg: '', effectiveDate: '', note: '', unit: 'kg' });
 
   useEffect(() => {
     loadProducts();
@@ -202,8 +205,40 @@ function AdminProductPage() {
       await ingredientService.updateIngredient(id, { name: editIngredient.name, manufacturer: editIngredient.manufacturer });
       showAlert('Ingredient updated successfully!', 'success');
       setEditIngredient(null);
+      setPriceHistory([]);
       loadIngredients();
     } catch { showAlert('Error updating ingredient.', 'danger'); }
+  };
+
+  const startEditIngredient = async (ing) => {
+    setEditIngredient(ing);
+    setNewPrice({ pricePerKg: '', effectiveDate: '', note: '', unit: 'kg' });
+    setLoadingPrices(true);
+    try {
+      setPriceHistory(await ingredientService.getPrices(ing.id));
+    } catch { setPriceHistory([]); }
+    finally { setLoadingPrices(false); }
+  };
+
+  const handleAddPrice = async () => {
+    if (!newPrice.pricePerKg || !newPrice.effectiveDate) {
+      showAlert('Price and effective date are required.', 'danger');
+      return;
+    }
+    const LB_TO_KG = 0.453592;
+    const pricePerKg = newPrice.unit === 'lb'
+      ? Number(newPrice.pricePerKg) / LB_TO_KG
+      : Number(newPrice.pricePerKg);
+    try {
+      const entry = await ingredientService.addPrice(editIngredient.id, {
+        pricePerKg,
+        effectiveDate: newPrice.effectiveDate,
+        note: newPrice.note,
+      });
+      setPriceHistory(prev => [entry, ...prev]);
+      setNewPrice({ pricePerKg: '', effectiveDate: '', note: '', unit: newPrice.unit });
+      showAlert('Price recorded.', 'success');
+    } catch { showAlert('Error recording price.', 'danger'); }
   };
 
   return (
@@ -273,14 +308,14 @@ function AdminProductPage() {
 
       {/* ── Ingredients Modal ── */}
       <div className="modal fade" id="ingredientsModal" tabIndex="-1">
-        <div className="modal-dialog">
+        <div className="modal-dialog modal-lg">
           <div className="modal-content">
             <div className="modal-header">
               <h5 className="modal-title">Ingredients</h5>
               <button type="button" className="btn-close" data-bs-dismiss="modal" />
             </div>
             <div className="modal-body">
-              <table className="table table-bordered">
+              <table className="table table-bordered mb-0">
                 <thead>
                   <tr><th>Name</th><th>Manufacturer</th><th>Actions</th></tr>
                 </thead>
@@ -289,23 +324,114 @@ function AdminProductPage() {
                     <tr key={ing.id}>
                       <td>
                         {editIngredient?.id === ing.id
-                          ? <input type="text" className="form-control" value={editIngredient.name} onChange={e => setEditIngredient({ ...editIngredient, name: e.target.value })} />
+                          ? <input type="text" className="form-control form-control-sm" value={editIngredient.name} onChange={e => setEditIngredient({ ...editIngredient, name: e.target.value })} />
                           : ing.name}
                       </td>
                       <td>
                         {editIngredient?.id === ing.id
-                          ? <input type="text" className="form-control" value={editIngredient.manufacturer} onChange={e => setEditIngredient({ ...editIngredient, manufacturer: e.target.value })} />
+                          ? <input type="text" className="form-control form-control-sm" value={editIngredient.manufacturer} onChange={e => setEditIngredient({ ...editIngredient, manufacturer: e.target.value })} />
                           : ing.manufacturer}
                       </td>
-                      <td>
-                        {editIngredient?.id === ing.id
-                          ? <button className="btn btn-success" onClick={() => handleIngredientUpdate(ing.id)}>Save</button>
-                          : <button className="btn btn-primary" onClick={() => setEditIngredient(ing)}>Edit</button>}
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {editIngredient?.id === ing.id ? (
+                          <button className="btn btn-success btn-sm" onClick={() => handleIngredientUpdate(ing.id)}>Save</button>
+                        ) : (
+                          <button className="btn btn-primary btn-sm" onClick={() => startEditIngredient(ing)}>Edit</button>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+
+              {/* ── Price history panel (shown when an ingredient is being edited) ── */}
+              {editIngredient && (
+                <div className="mt-4 p-3 border rounded bg-light">
+                  <h6 className="mb-3">
+                    Price History — <strong>{editIngredient.name}</strong>
+                  </h6>
+
+                  {/* Add new price */}
+                  <div className="row g-2 align-items-end mb-3">
+                    <div className="col-auto">
+                      <label className="form-label mb-1" style={{ fontSize: 12 }}>
+                        Price / {newPrice.unit}
+                      </label>
+                      <div className="input-group input-group-sm">
+                        <span className="input-group-text">$</span>
+                        <input
+                          type="number" min="0" step="0.0001"
+                          className="form-control" style={{ width: 100 }}
+                          placeholder="0.0000"
+                          value={newPrice.pricePerKg}
+                          onChange={e => setNewPrice(p => ({ ...p, pricePerKg: e.target.value }))}
+                        />
+                        <select
+                          className="input-group-text form-select form-select-sm"
+                          style={{ width: 65 }}
+                          value={newPrice.unit}
+                          onChange={e => setNewPrice(p => ({ ...p, unit: e.target.value }))}
+                        >
+                          <option value="kg">kg</option>
+                          <option value="lb">lb</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="col-auto">
+                      <label className="form-label mb-1" style={{ fontSize: 12 }}>Effective from</label>
+                      <input
+                        type="date" className="form-control form-control-sm"
+                        value={newPrice.effectiveDate}
+                        onChange={e => setNewPrice(p => ({ ...p, effectiveDate: e.target.value }))}
+                      />
+                    </div>
+                    <div className="col">
+                      <label className="form-label mb-1" style={{ fontSize: 12 }}>Note <span className="text-muted">(optional)</span></label>
+                      <input
+                        type="text" className="form-control form-control-sm"
+                        placeholder="e.g. new supplier, seasonal increase"
+                        value={newPrice.note}
+                        onChange={e => setNewPrice(p => ({ ...p, note: e.target.value }))}
+                      />
+                    </div>
+                    <div className="col-auto">
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={handleAddPrice}
+                        disabled={!newPrice.pricePerKg || !newPrice.effectiveDate}
+                      >
+                        Record
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* History table */}
+                  {loadingPrices ? (
+                    <div className="text-muted" style={{ fontSize: 13 }}>Loading…</div>
+                  ) : priceHistory.length === 0 ? (
+                    <div className="text-muted" style={{ fontSize: 13 }}>No prices recorded yet.</div>
+                  ) : (
+                    <table className="table table-sm table-bordered mb-0">
+                      <thead className="table-light">
+                        <tr>
+                          <th>Effective from</th>
+                          <th>Price / kg</th>
+                          <th>Note</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {priceHistory.map(p => (
+                          <tr key={p.id}>
+                            <td>{p.effectiveDate}</td>
+                            <td>${Number(p.pricePerKg).toFixed(4)}</td>
+                            <td className="text-muted">{p.note || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

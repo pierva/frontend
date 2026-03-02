@@ -26,14 +26,29 @@ const ingredientService = {
     return response.data;
   },
 
-   // Delete an ingredient (Admin only)
-   deleteIngredient: async (id) => {
+  deleteIngredient: async (id) => {
     const token = localStorage.getItem('token');
     const response = await axios.delete(`${API_URL}/api/ingredients/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}` },
     });
     return response.data;
-    },
+  },
+  getPrices: async (ingredientId) => {
+    const token = localStorage.getItem('token');
+    const response = await axios.get(`${API_URL}/api/ingredients/${ingredientId}/prices`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  },
+  addPrice: async (ingredientId, { pricePerKg, effectiveDate, note }) => {
+    const token = localStorage.getItem('token');
+    const response = await axios.post(
+      `${API_URL}/api/ingredients/${ingredientId}/prices`,
+      { pricePerKg, effectiveDate, note },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return response.data;
+  },
 };
 
 

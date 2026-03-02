@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 import logo from '../media/Pizzacini/logo_text.png';
 import bakingCcpService from '../services/bakingCcpService';
+import authService from '../services/authService';
 
 function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -66,14 +67,15 @@ function Navbar() {
     setIsMenuOpen(false);
   }, [location]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    setIsLoggedIn(false);
-    setUserRole('');
-    setActiveRunId(null);
-    setPendingQACount(0);
-    navigate('/', { replace: true });
-  };
+// Replace the handleLogout function in Navbar.js
+const handleLogout = () => {
+  authService.clearToken(); // dispatches authChanged + removes token
+  setIsLoggedIn(false);
+  setUserRole('');
+  setActiveRunId(null);
+  setPendingQACount(0);
+  navigate('/', { replace: true });
+};
 
   const logoUrl = process.env.REACT_APP_LOGO_URL || logo;
 

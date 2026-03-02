@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
+import { PermissionProvider } from './context/PermissionContext';
 
 import Login from './pages/Login';
 import ProductionLog from './pages/ProductionLog';
@@ -35,72 +36,124 @@ function App() {
 
   return (
     <Router>
-      <Navbar />
-      <Routes>
-        {/* Public route */}
-        <Route
-          path="/"
-          element={isAuthed ? <Navigate to="/traceability" replace /> : <Login />}
-        />
+      <PermissionProvider>
+        <Navbar />
+        <Routes>
+          {/* Public */}
+          <Route
+            path="/"
+            element={isAuthed ? <Navigate to="/traceability" replace /> : <Login />}
+          />
 
-        {/* All authenticated users */}
-        <Route path="/logs" element={<ProtectedRoute><ProductionLog /></ProtectedRoute>} />
-
-        {/* Admin & factory_team */}
-        <Route
-          path="/add-log"
-          element={
-            <ProtectedRoute allowedRoles={['admin', 'factory_team']}>
+          {/* Production */}
+          <Route path="/logs" element={
+            <ProtectedRoute moduleKey="production.logs">
+              <ProductionLog />
+            </ProtectedRoute>
+          } />
+          <Route path="/add-log" element={
+            <ProtectedRoute allowedRoles={['admin', 'factory_team']} moduleKey="production.logs">
               <AddLog />
             </ProtectedRoute>
-          }
-        />
+          } />
+          <Route path="/traceability" element={
+            <ProtectedRoute moduleKey="production.traceability">
+              <TraceabilityPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/inventory" element={
+            <ProtectedRoute allowedRoles={['admin', 'factory_team']} moduleKey="production.inventory">
+              <InventoryPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/factory/orders" element={
+            <ProtectedRoute allowedRoles={['admin', 'factory_team']} moduleKey="production.orders">
+              <FactoryOrdersPage />
+            </ProtectedRoute>
+          } />
 
-        {/* Admin-only */}
-        <Route path="/admin/products" element={<ProtectedRoute allowedRoles={['admin']}><AdminProductPage /></ProtectedRoute>} />
-        <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['admin']}><AdminUserManagement /></ProtectedRoute>} />
-        <Route path="/admin/customers" element={<ProtectedRoute allowedRoles={['admin']}><AdminCustomerPage /></ProtectedRoute>} />
-        <Route path="/admin/orders" element={<ProtectedRoute allowedRoles={['admin']}><AdminOrdersPage /></ProtectedRoute>} />
+          {/* Admin */}
+          <Route path="/admin/products" element={
+            <ProtectedRoute allowedRoles={['admin']} moduleKey="admin.products">
+              <AdminProductPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/users" element={
+            <ProtectedRoute allowedRoles={['admin']} moduleKey="admin.users">
+              <AdminUserManagement />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/customers" element={
+            <ProtectedRoute allowedRoles={['admin']} moduleKey="admin.customers">
+              <AdminCustomerPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/orders" element={
+            <ProtectedRoute allowedRoles={['admin']} moduleKey="admin.orders">
+              <AdminOrdersPage />
+            </ProtectedRoute>
+          } />
 
-        <Route path="/trends/*" element={<ProtectedRoute allowedRoles={['admin']}><TrendsAnalyticsPage /></ProtectedRoute>} />
-        <Route path="/trends/production/labor" element={<ProtectedRoute allowedRoles={['admin']}><ProductionLaborPage /></ProtectedRoute>} />
-        <Route path="/trends/complaints/new" element={<ProtectedRoute allowedRoles={['admin']}><NewComplaintPage /></ProtectedRoute>} />
-        <Route path="/trends/environmental/config" element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}><EnvironmentalConfigPage /></ProtectedRoute>} />
-        <Route path="/trends/environmental/new" element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}><EnvironmentalNewATPPage /></ProtectedRoute>} />
+          {/* Analytics */}
+          <Route path="/trends/*" element={
+            <ProtectedRoute allowedRoles={['admin', 'qa']} moduleKey="analytics.overview">
+              <TrendsAnalyticsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/trends/production/labor" element={
+            <ProtectedRoute allowedRoles={['admin']} moduleKey="analytics.labor">
+              <ProductionLaborPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/trends/complaints/new" element={
+            <ProtectedRoute allowedRoles={['admin', 'qa']} moduleKey="analytics.complaints">
+              <NewComplaintPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/trends/environmental/config" element={
+            <ProtectedRoute allowedRoles={['admin', 'factory_team']} moduleKey="analytics.environmental">
+              <EnvironmentalConfigPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/trends/environmental/new" element={
+            <ProtectedRoute allowedRoles={['admin', 'factory_team', 'qa']} moduleKey="analytics.environmental">
+              <EnvironmentalNewATPPage />
+            </ProtectedRoute>
+          } />
 
-        {/* CCP — baking (factory + admin) */}
-        <Route path="/ccp/baking/config" element={<ProtectedRoute allowedRoles={['admin']}><BakingCcpConfigPage /></ProtectedRoute>} />
-        <Route path="/ccp/baking/start" element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}><BakingCcpStartPage /></ProtectedRoute>} />
-        <Route path="/ccp/baking/live/:runId" element={<ProtectedRoute allowedRoles={['admin', 'factory_team']}><BakingCcpLivePage /></ProtectedRoute>} />
+          {/* CCP — Production */}
+          <Route path="/ccp/baking/config" element={
+            <ProtectedRoute allowedRoles={['admin']} moduleKey="ccp.baking.config">
+              <BakingCcpConfigPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/ccp/baking/start" element={
+            <ProtectedRoute allowedRoles={['admin', 'factory_team']} moduleKey="ccp.baking.production">
+              <BakingCcpStartPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/ccp/baking/live/:runId" element={
+            <ProtectedRoute allowedRoles={['admin', 'factory_team']} moduleKey="ccp.baking.production">
+              <BakingCcpLivePage />
+            </ProtectedRoute>
+          } />
 
-        {/* CCP — QA review (qa + admin) */}
-        <Route
-          path="/ccp/baking/queue"
-          element={
-            <ProtectedRoute allowedRoles={['admin', 'qa']}>
+          {/* CCP — QA */}
+          <Route path="/ccp/baking/queue" element={
+            <ProtectedRoute allowedRoles={['admin', 'qa']} moduleKey="ccp.baking.qa">
               <BakingCcpQueuePage />
             </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/ccp/baking/verify/:runId"
-          element={
-            <ProtectedRoute allowedRoles={['admin', 'qa']}>
+          } />
+          <Route path="/ccp/baking/verify/:runId" element={
+            <ProtectedRoute allowedRoles={['admin', 'qa']} moduleKey="ccp.baking.qa">
               <BakingCcpVerifyPage />
             </ProtectedRoute>
-          }
-        />
+          } />
 
-        {/* Factory orders */}
-        <Route path="/factory/orders" element={<ProtectedRoute><FactoryOrdersPage /></ProtectedRoute>} />
-
-        {/* All authenticated */}
-        <Route path="/traceability" element={<ProtectedRoute><TraceabilityPage /></ProtectedRoute>} />
-        <Route path="/inventory" element={<ProtectedRoute><InventoryPage /></ProtectedRoute>} />
-
-        {/* 404 */}
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
+          {/* 404 */}
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </PermissionProvider>
     </Router>
   );
 }

@@ -1,43 +1,56 @@
-// components/ProtectedRoute.js
+// src/components/ProtectedRoute.js
+// Supports both the legacy allowedRoles check AND the new moduleKey check.
+// Both can be combined: role must be allowed AND module must be granted.
+//
+// Usage:
+//   <ProtectedRoute>                                    → any authenticated user
+//   <ProtectedRoute allowedRoles={['admin','qa']}>      → role check only (legacy)
+//   <ProtectedRoute moduleKey="analytics.labor">        → module permission check
+//   <ProtectedRoute allowedRoles={['admin']} moduleKey="analytics.labor">  → both
 
 import React from 'react';
-import { Navigate } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode';
+import { Navigate, useLocation } from 'react-router-dom';
+import authService from '../services/authService';
+import { usePermissions } from '../context/PermissionContext';
 
-const ProtectedRoute = ({ children, allowedRoles = [] }) => {
-  const token = localStorage.getItem('token');
+export default function ProtectedRoute({ children, allowedRoles, moduleKey }) {
+  const location = useLocation();
+  const { hasModule, role, loading } = usePermissions();
 
-  const logoutAndRedirect = () => {
-    localStorage.removeItem('token');
-    return <Navigate to="/" replace />;
-  };
-
-  if (!token) {
-    return <Navigate to="/" replace />;
+  // Not logged in
+  if (!authService.isTokenValid()) {
+    return <Navigate to="/" replace state={{ from: location }} />;
   }
 
-  try {
-    const decodedToken = jwtDecode(token);
-    const userRole = decodedToken.role;
-    const currentTime = Math.floor(Date.now() / 1000);
-
-    // If token missing exp or expired -> clear it (prevents redirect loops)
-    if (!decodedToken?.exp || decodedToken.exp <= currentTime) {
-      return logoutAndRedirect();
-    }
-
-    // Role gating
-    if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
-      // Optional: don't clear token here because user is authenticated, just unauthorized
-      // But redirecting to "/" could cause confusion if "/" redirects; better to go to a safe page:
-      return <Navigate to="/traceability" replace />;
-    }
-
-    return children;
-  } catch (error) {
-    // Decoding failed -> token is junk -> clear it
-    return logoutAndRedirect();
+  // Still loading permissions — show nothing briefly to avoid flash
+  if (loading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '60vh' }}>
+        <div className="spinner-border text-secondary" />
+      </div>
+    );
   }
-};
 
-export default ProtectedRoute;
+  // Role ceiling check (legacy allowedRoles prop)
+  if (allowedRoles && role !== 'admin' && !allowedRoles.includes(role)) {
+    return <Navigate to="/traceability" replace />;
+  }
+
+  // Module permission check
+  if (moduleKey && !hasModule(moduleKey)) {
+    return (
+      <div className="container mt-5 text-center">
+        <div className="alert alert-warning d-inline-block px-5 py-4">
+          <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
+          <h5>Access Restricted</h5>
+          <p className="mb-0 text-muted" style={{ fontSize: 14 }}>
+            You don't have permission to access this module.<br />
+            Contact your administrator to request access.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return children;
+}

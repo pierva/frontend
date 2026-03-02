@@ -137,3 +137,12 @@ ALTER TABLE IngredientLotCodes
     OR (quantityKg IS NOT NULL AND quantityKg > 0)
   );
 ```
+
+## New analytics module (ingredient quantities and prices)
+
+Add quantity to ProductIngredient table
+```
+ALTER TABLE `ProductIngredients`
+  ADD COLUMN `expectedQuantityKg` DECIMAL(10, 3) NULL
+  AFTER `ingredientId`;
+```

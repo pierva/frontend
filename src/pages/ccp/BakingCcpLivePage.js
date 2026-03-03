@@ -1041,23 +1041,37 @@ export default function BakingCcpLivePage() {
                         {showCompletedCarts && (
                           <div className="table-responsive mt-2" style={{ opacity: 0.6 }}>
                             <table className="table table-sm align-middle">
+                              <thead>
+                                <tr>
+                                  <th style={{ width: 90 }}>Cart</th>
+                                  <th>Product</th>
+                                  <th>Units</th>
+                                  <th>Oven Out</th>
+                                  <th>Blast In</th>
+                                  <th>Blast Out</th>
+                                  <th style={{ width: 110 }}>Freezer (min)</th>
+                                  <th style={{ width: 70 }}></th>
+                                </tr>
+                              </thead>
                               <tbody>
                                 {completedCarts.map((c) => {
                                   const ovenOut = c.ovenOutAt ? new Date(c.ovenOutAt) : null;
                                   const blastInAt = c.blastInAt ? new Date(c.blastInAt) : null;
                                   const blastOutAt = c.blastOutAt ? new Date(c.blastOutAt) : null;
+                                  const freezerMins = blastInAt && blastOutAt
+                                    ? Math.round((blastOutAt.getTime() - blastInAt.getTime()) / 60000)
+                                    : null;
                                   const prodName = c?.Product?.name || productById.get(Number(c.productId))?.name || '—';
                                   return (
                                     <tr key={c.id}>
-                                      <td style={{ fontWeight: 900, width: 90 }}>#{c.cartNumber}</td>
+                                      <td style={{ fontWeight: 900 }}>#{c.cartNumber}</td>
                                       <td>{prodName}</td>
                                       <td>{c.unitsInCart ?? '—'}</td>
                                       <td>{ovenOut ? ovenOut.toLocaleTimeString() : '—'}</td>
                                       <td>{blastInAt ? blastInAt.toLocaleTimeString() : '—'}</td>
                                       <td>{blastOutAt ? blastOutAt.toLocaleTimeString() : '—'}</td>
-                                      <td style={{ width: 260 }}>
-                                        <span className="badge text-bg-success">Done</span>
-                                      </td>
+                                      <td style={{ fontWeight: 700 }}>{freezerMins != null ? `${freezerMins} min` : '—'}</td>
+                                      <td><span className="badge text-bg-success">Done</span></td>
                                     </tr>
                                   );
                                 })}
@@ -1125,7 +1139,7 @@ export default function BakingCcpLivePage() {
                       disabled={!isBaking}
                     >
                       <option value="">No cart</option>
-                      {carts.map(c => (
+                      {carts.filter(c => !c?.blastInAt).map(c => (
                         <option key={c.id} value={c.id}>Cart #{c.cartNumber}</option>
                       ))}
                     </select>

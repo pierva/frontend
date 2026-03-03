@@ -1,14 +1,21 @@
 // pages/ProductionLog.js
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import logService from '../services/logService';
+import bakingCcpService from '../services/bakingCcpService';
 import ProductionTrendChart from '../components/ProductionTrendChart';
+import { usePermissions } from '../context/PermissionContext';
 
 function ProductionLog() {
+  const { hasModule } = usePermissions();
+  const canViewSQF = hasModule('ccp.baking.qa');
+
   const [logs, setLogs] = useState([]);
   const [ingredients, setIngredients] = useState([]);
   const [selectedLog, setSelectedLog] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [ccpRun, setCcpRun] = useState(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -55,16 +62,23 @@ function ProductionLog() {
 
   const handleRowClick = (log) => {
     setSelectedLog(log);
+    setCcpRun(null);
     logService
       .getIngredientsByLotCode(log.batchId)
       .then((data) => setIngredients(data))
       .catch((err) => console.error('Error fetching ingredients:', err));
+    if (canViewSQF && log.batchId) {
+      bakingCcpService.getRunForBatch(log.batchId)
+        .then((run) => setCcpRun(run || null))
+        .catch(() => setCcpRun(null));
+    }
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setSelectedLog(null);
     setIngredients([]);
+    setCcpRun(null);
     setIsModalOpen(false);
   };
 
@@ -348,6 +362,25 @@ function ProductionLog() {
                   </>
                 )}
               </div>
+
+              {canViewSQF && (
+                <div className="modal-footer">
+                  {ccpRun ? (
+                    <Link
+                      to={`/ccp/baking/verify/${ccpRun.id}`}
+                      className="btn btn-outline-primary btn-sm"
+                      onClick={closeModal}
+                    >
+                      View SQF Report
+                    </Link>
+                  ) : (
+                    <button className="btn btn-outline-secondary btn-sm" disabled title="No CCP run found for this batch">
+                      View SQF Report
+                    </button>
+                  )}
+                  <button className="btn btn-secondary btn-sm" onClick={closeModal}>Close</button>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -62,6 +62,14 @@ const getRuns = async (status = 'COMPLETED') => {
   return res.data;
 };
 
+const getRunForBatch = async (batchId) => {
+  const res = await axios.get(`${API_URL}/api/analytics/bakingccp/runs`, {
+    headers: authHeaders(),
+    params: { batchId, status: 'BAKING,BAKING_PAUSED,BAKING_STOPPED,COMPLETED,VERIFIED' },
+  });
+  return res.data?.runs?.[0] || null;
+};
+
 const getRun = async (runId) => {
   const res = await axios.get(`${API_URL}/api/analytics/bakingccp/runs/${runId}`, {
     headers: authHeaders(),
@@ -196,6 +204,7 @@ const bakingCcpService = {
   startRun,
   getActiveRun,
   getRuns,
+  getRunForBatch,
   getRun,
   getRunLive,
   pauseRun,

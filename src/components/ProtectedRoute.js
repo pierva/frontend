@@ -1,21 +1,18 @@
 // src/components/ProtectedRoute.js
-// Supports both the legacy allowedRoles check AND the new moduleKey check.
-// Both can be combined: role must be allowed AND module must be granted.
+// Access is controlled entirely by the per-user module permission system.
 //
 // Usage:
-//   <ProtectedRoute>                                    → any authenticated user
-//   <ProtectedRoute allowedRoles={['admin','qa']}>      → role check only (legacy)
-//   <ProtectedRoute moduleKey="analytics.labor">        → module permission check
-//   <ProtectedRoute allowedRoles={['admin']} moduleKey="analytics.labor">  → both
+//   <ProtectedRoute>                        → any authenticated user
+//   <ProtectedRoute moduleKey="analytics.labor">  → module permission check
 
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import authService from '../services/authService';
 import { usePermissions } from '../context/PermissionContext';
 
-export default function ProtectedRoute({ children, allowedRoles, moduleKey }) {
+export default function ProtectedRoute({ children, moduleKey }) {
   const location = useLocation();
-  const { hasModule, role, loading } = usePermissions();
+  const { hasModule, loading } = usePermissions();
 
   // Not logged in
   if (!authService.isTokenValid()) {
@@ -29,11 +26,6 @@ export default function ProtectedRoute({ children, allowedRoles, moduleKey }) {
         <div className="spinner-border text-secondary" />
       </div>
     );
-  }
-
-  // Role ceiling check (legacy allowedRoles prop)
-  if (allowedRoles && role !== 'admin' && !allowedRoles.includes(role)) {
-    return <Navigate to="/traceability" replace />;
   }
 
   // Module permission check

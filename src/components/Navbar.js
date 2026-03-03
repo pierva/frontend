@@ -1,15 +1,15 @@
 // components/Navbar.js
 
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 import logo from '../media/Pizzacini/logo_text.png';
 import bakingCcpService from '../services/bakingCcpService';
 import authService from '../services/authService';
+import { usePermissions } from '../context/PermissionContext';
 
 function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -22,13 +22,12 @@ function Navbar() {
 
   const navbarRef = useRef();
   const location = useLocation();
-
+  const { hasModule } = usePermissions();
 
   const checkLoginStatus = () => {
     const token = localStorage.getItem('token');
     if (!token) {
       setIsLoggedIn(false);
-      setUserRole('');
       return;
     }
 
@@ -38,15 +37,12 @@ function Navbar() {
       if (!decodedToken?.exp || decodedToken.exp <= nowSec) {
         localStorage.removeItem('token');
         setIsLoggedIn(false);
-        setUserRole('');
         return;
       }
       setIsLoggedIn(true);
-      setUserRole(decodedToken.role || '');
     } catch (e) {
       localStorage.removeItem('token');
       setIsLoggedIn(false);
-      setUserRole('');
     }
   };
 
@@ -67,39 +63,26 @@ function Navbar() {
     setIsMenuOpen(false);
   }, [location]);
 
-const handleLogout = () => {
-  authService.clearToken();
-  window.location.href = '/';
-};
+  const handleLogout = () => {
+    authService.clearToken();
+    window.location.href = '/';
+  };
 
   const logoUrl = process.env.REACT_APP_LOGO_URL || logo;
 
-  const perms = useMemo(() => {
-    const isAdmin = userRole === 'admin';
-    const isFactory = userRole === 'factory_team';
-    const isQA = userRole === 'qa';
-    return {
-      isAdmin,
-      isFactory,
-      isQA,
-      canAddLog: isAdmin || isFactory,
-      canManageOrders: isAdmin || isFactory,
-      canSubmitOrders: isAdmin || isFactory,
-      canStartProduction: isAdmin || isFactory,
-      canReviewQA: isAdmin || isQA,
-    };
-  }, [userRole]);
+  const canProduction = isLoggedIn && hasModule('ccp.baking.production');
+  const canReviewQA   = isLoggedIn && hasModule('ccp.baking.qa');
 
   const closeAll = () => {
     setIsExpanded(false);
     setIsMenuOpen(false);
   };
 
-  // Fetch active run for factory/admin
+  // Fetch active run
   useEffect(() => {
     let cancelled = false;
     const fetchActiveRun = async () => {
-      if (!isLoggedIn || !perms.canStartProduction) {
+      if (!canProduction) {
         setActiveRunId(null);
         return;
       }
@@ -116,38 +99,37 @@ const handleLogout = () => {
     };
     fetchActiveRun();
     return () => { cancelled = true; };
-  }, [isLoggedIn, perms.canStartProduction, location.pathname]);
+  }, [canProduction, location.pathname]);
 
-  // Re-poll active run when any page signals a production status change
-  // (e.g. live page completes run, verify page locks run)
+  // Re-poll active run on production status change
   useEffect(() => {
     const handler = () => {
-      if (!isLoggedIn || !perms.canStartProduction) return;
+      if (!canProduction) return;
       bakingCcpService.getActiveRun()
         .then(res => setActiveRunId(res?.run?.id ?? null))
         .catch(() => setActiveRunId(null));
     };
     window.addEventListener('productionStatusChanged', handler);
     return () => window.removeEventListener('productionStatusChanged', handler);
-  }, [isLoggedIn, perms.canStartProduction]);
+  }, [canProduction]);
 
-  // Also refresh QA badge count on status change
+  // Refresh QA badge count on status change
   useEffect(() => {
     const handler = () => {
-      if (!isLoggedIn || !perms.canReviewQA) return;
+      if (!canReviewQA) return;
       bakingCcpService.getRuns('COMPLETED')
         .then(res => setPendingQACount(Array.isArray(res?.runs) ? res.runs.length : 0))
         .catch(() => setPendingQACount(0));
     };
     window.addEventListener('productionStatusChanged', handler);
     return () => window.removeEventListener('productionStatusChanged', handler);
-  }, [isLoggedIn, perms.canReviewQA]);
+  }, [canReviewQA]);
 
-  // Fetch pending QA count for qa/admin
+  // Fetch pending QA count
   useEffect(() => {
     let cancelled = false;
     const fetchPendingQA = async () => {
-      if (!isLoggedIn || !perms.canReviewQA) {
+      if (!canReviewQA) {
         setPendingQACount(0);
         return;
       }
@@ -161,9 +143,18 @@ const handleLogout = () => {
     };
     fetchPendingQA();
     return () => { cancelled = true; };
-  }, [isLoggedIn, perms.canReviewQA, location.pathname]);
+  }, [canReviewQA, location.pathname]);
 
   const LIVE_RUN_PATH = activeRunId ? `/ccp/baking/live/${activeRunId}` : '/ccp/baking/start';
+
+  // Computed flags for sections that group multiple links
+  const hasAnyDropdownSection =
+    canReviewQA ||
+    hasModule('analytics.overview') ||
+    hasModule('ccp.baking.config') ||
+    hasModule('admin.products') ||
+    hasModule('admin.users') ||
+    hasModule('admin.customers');
 
   return (
     <>
@@ -203,7 +194,7 @@ const handleLogout = () => {
                 </li>
               ) : (
                 <>
-                  {perms.canAddLog && (
+                  {isLoggedIn && hasModule('production.logs') && (
                     <li className="nav-item">
                       <Link className="btn btn-outline-light" to="/add-log" onClick={closeAll}>
                         Add Log
@@ -211,7 +202,7 @@ const handleLogout = () => {
                     </li>
                   )}
 
-                  {perms.canManageOrders && (
+                  {isLoggedIn && hasModule('production.orders') && (
                     <li className="nav-item">
                       <Link className="btn btn-outline-light" to="/factory/orders" onClick={closeAll}>
                         Manage Orders
@@ -219,8 +210,7 @@ const handleLogout = () => {
                     </li>
                   )}
 
-                  {/* QA Review button — qa and admin only */}
-                  {perms.canReviewQA && (
+                  {canReviewQA && (
                     <li className="nav-item">
                       <Link
                         className="btn btn-outline-warning position-relative"
@@ -241,7 +231,7 @@ const handleLogout = () => {
                     </li>
                   )}
 
-                  {perms.canStartProduction && (
+                  {canProduction && (
                     <li className="nav-item">
                       <Link
                         className={`btn ${activeRunId ? 'btn-danger' : 'btn-success'}`}
@@ -266,7 +256,7 @@ const handleLogout = () => {
                     </li>
                   )}
 
-                  {perms.canSubmitOrders && (
+                  {isLoggedIn && hasModule('admin.orders') && (
                     <li className="nav-item">
                       <Link className="btn btn-warning" to="/admin/orders" onClick={closeAll}>
                         Submit Order
@@ -284,31 +274,29 @@ const handleLogout = () => {
                   <li className="nav-item d-lg-none">
                     <Link className="nav-link" to="/inventory" onClick={closeAll}>Inventory</Link>
                   </li>
-
-                  {perms.isAdmin && (
-                    <>
-                      <li className="nav-item d-lg-none">
-                        <Link className="nav-link" to="/trends" onClick={closeAll}>Trends and Analytics</Link>
-                      </li>
-                      <li className="nav-item d-lg-none">
-                        <Link className="nav-link" to="/ccp/baking/config" onClick={closeAll}>Baking CCP Config</Link>
-                      </li>
-                      <li className="nav-item d-lg-none">
-                        <Link className="nav-link" to="/admin/products" onClick={closeAll}>Products & Ingredients</Link>
-                      </li>
-                      <li className="nav-item d-lg-none">
-                        <Link className="nav-link" to="/admin/users" onClick={closeAll}>User Management</Link>
-                      </li>
-                      <li className="nav-item d-lg-none">
-                        <Link className="nav-link" to="/admin/customers" onClick={closeAll}>Customers</Link>
-                      </li>
-                    </>
-                  )}
-
-                  {/* QA-only mobile link */}
-                  {perms.isQA && (
+                  {isLoggedIn && hasModule('analytics.overview') && (
                     <li className="nav-item d-lg-none">
-                      <Link className="nav-link" to="/ccp/baking/queue" onClick={closeAll}>QA Review Queue</Link>
+                      <Link className="nav-link" to="/trends" onClick={closeAll}>Trends and Analytics</Link>
+                    </li>
+                  )}
+                  {isLoggedIn && hasModule('ccp.baking.config') && (
+                    <li className="nav-item d-lg-none">
+                      <Link className="nav-link" to="/ccp/baking/config" onClick={closeAll}>Baking CCP Config</Link>
+                    </li>
+                  )}
+                  {isLoggedIn && hasModule('admin.products') && (
+                    <li className="nav-item d-lg-none">
+                      <Link className="nav-link" to="/admin/products" onClick={closeAll}>Products & Ingredients</Link>
+                    </li>
+                  )}
+                  {isLoggedIn && hasModule('admin.users') && (
+                    <li className="nav-item d-lg-none">
+                      <Link className="nav-link" to="/admin/users" onClick={closeAll}>User Management</Link>
+                    </li>
+                  )}
+                  {isLoggedIn && hasModule('admin.customers') && (
+                    <li className="nav-item d-lg-none">
+                      <Link className="nav-link" to="/admin/customers" onClick={closeAll}>Customers</Link>
                     </li>
                   )}
 
@@ -337,28 +325,30 @@ const handleLogout = () => {
                       <Link className="dropdown-item" to="/traceability" onClick={closeAll}>Traceability</Link>
                       <Link className="dropdown-item" to="/inventory" onClick={closeAll}>Inventory</Link>
 
-                      {/* QA review in dropdown for both admin and qa */}
-                      {perms.canReviewQA && (
-                        <>
-                          <div className="dropdown-divider" />
-                          <Link className="dropdown-item d-flex justify-content-between align-items-center" to="/ccp/baking/queue" onClick={closeAll}>
-                            QA Review Queue
-                            {pendingQACount > 0 && (
-                              <span className="badge bg-danger ms-2">{pendingQACount}</span>
-                            )}
-                          </Link>
-                        </>
-                      )}
+                      {hasAnyDropdownSection && <div className="dropdown-divider" />}
 
-                      {perms.isAdmin && (
-                        <>
-                          <div className="dropdown-divider" />
-                          <Link className="dropdown-item" to="/trends" onClick={closeAll}>Trends and Analytics</Link>
-                          <Link className="dropdown-item" to="/ccp/baking/config" onClick={closeAll}>Baking CCP Config</Link>
-                          <Link className="dropdown-item" to="/admin/products" onClick={closeAll}>Products & Ingredients</Link>
-                          <Link className="dropdown-item" to="/admin/users" onClick={closeAll}>User Management</Link>
-                          <Link className="dropdown-item" to="/admin/customers" onClick={closeAll}>Customers</Link>
-                        </>
+                      {canReviewQA && (
+                        <Link className="dropdown-item d-flex justify-content-between align-items-center" to="/ccp/baking/queue" onClick={closeAll}>
+                          QA Review Queue
+                          {pendingQACount > 0 && (
+                            <span className="badge bg-danger ms-2">{pendingQACount}</span>
+                          )}
+                        </Link>
+                      )}
+                      {isLoggedIn && hasModule('analytics.overview') && (
+                        <Link className="dropdown-item" to="/trends" onClick={closeAll}>Trends and Analytics</Link>
+                      )}
+                      {isLoggedIn && hasModule('ccp.baking.config') && (
+                        <Link className="dropdown-item" to="/ccp/baking/config" onClick={closeAll}>Baking CCP Config</Link>
+                      )}
+                      {isLoggedIn && hasModule('admin.products') && (
+                        <Link className="dropdown-item" to="/admin/products" onClick={closeAll}>Products & Ingredients</Link>
+                      )}
+                      {isLoggedIn && hasModule('admin.users') && (
+                        <Link className="dropdown-item" to="/admin/users" onClick={closeAll}>User Management</Link>
+                      )}
+                      {isLoggedIn && hasModule('admin.customers') && (
+                        <Link className="dropdown-item" to="/admin/customers" onClick={closeAll}>Customers</Link>
                       )}
 
                       <div className="dropdown-divider" />

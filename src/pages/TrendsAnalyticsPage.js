@@ -6,8 +6,37 @@ import ComplaintConfigPage from './trends/ComplaintConfigPage';
 import ProductionTrendsPage from './trends/ProductionTrendsPage';
 import EnvironmentalTrendsPage from './trends/EnvironmentalTrendsPage';
 import IngredientTrendsPage from './trends/IngredientTrendsPage';
+import { usePermissions } from '../context/PermissionContext';
+
+const AccessDenied = () => (
+  <div className="text-center mt-5">
+    <div className="alert alert-warning d-inline-block px-5 py-4">
+      <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
+      <h5>Access Restricted</h5>
+      <p className="mb-0 text-muted" style={{ fontSize: 14 }}>
+        You don't have permission to access this module.<br />
+        Contact your administrator to request access.
+      </p>
+    </div>
+  </div>
+);
 
 export default function TrendsAnalyticsPage() {
+  const { hasModule } = usePermissions();
+
+  const canComplaints   = hasModule('analytics.complaints');
+  const canLabor        = hasModule('analytics.labor');
+  const canEnvironmental = hasModule('analytics.environmental');
+  const canIngredients  = hasModule('analytics.overview');
+
+  // Redirect to the first accessible tab
+  const defaultTab =
+    canComplaints   ? 'complaints' :
+    canLabor        ? 'production' :
+    canEnvironmental ? 'environmental' :
+    canIngredients  ? 'ingredients' :
+    null;
+
   return (
     <div className="container-fluid mt-4">
       <div className="row">
@@ -18,29 +47,37 @@ export default function TrendsAnalyticsPage() {
               Trends & Analytics
             </div>
             <div className="list-group list-group-flush">
-              <NavLink to="complaints" className={({ isActive }) =>
-                `list-group-item list-group-item-action ${isActive ? 'active' : ''}`
-              }>
-                Complaints
-              </NavLink>
+              {canComplaints && (
+                <NavLink to="complaints" className={({ isActive }) =>
+                  `list-group-item list-group-item-action ${isActive ? 'active' : ''}`
+                }>
+                  Complaints
+                </NavLink>
+              )}
 
-              <NavLink to="production" className={({ isActive }) =>
-                `list-group-item list-group-item-action ${isActive ? 'active' : ''}`
-              }>
-                Production
-              </NavLink>
+              {canLabor && (
+                <NavLink to="production" className={({ isActive }) =>
+                  `list-group-item list-group-item-action ${isActive ? 'active' : ''}`
+                }>
+                  Production
+                </NavLink>
+              )}
 
-              <NavLink to="environmental" className={({ isActive }) =>
-                `list-group-item list-group-item-action ${isActive ? 'active' : ''}`
-              }>
-                Environmental
-              </NavLink>
+              {canEnvironmental && (
+                <NavLink to="environmental" className={({ isActive }) =>
+                  `list-group-item list-group-item-action ${isActive ? 'active' : ''}`
+                }>
+                  Environmental
+                </NavLink>
+              )}
 
-              <NavLink to="ingredients" className={({ isActive }) =>
-                `list-group-item list-group-item-action ${isActive ? 'active' : ''}`
-              }>
-                Ingredients
-              </NavLink>
+              {canIngredients && (
+                <NavLink to="ingredients" className={({ isActive }) =>
+                  `list-group-item list-group-item-action ${isActive ? 'active' : ''}`
+                }>
+                  Ingredients
+                </NavLink>
+              )}
             </div>
           </div>
         </div>
@@ -48,18 +85,16 @@ export default function TrendsAnalyticsPage() {
         {/* Main panel */}
         <div className="col-12 col-md-9 col-lg-10">
           <Routes>
-            <Route path="/" element={<Navigate to="complaints" replace />} />
+            <Route path="/" element={defaultTab ? <Navigate to={defaultTab} replace /> : <AccessDenied />} />
 
-            {/* Complaints */}
-            <Route path="complaints" element={<ComplaintTrendsPage />} />
-            <Route path="complaints/config" element={<ComplaintConfigPage />} />
+            <Route path="complaints" element={canComplaints ? <ComplaintTrendsPage /> : <AccessDenied />} />
+            <Route path="complaints/config" element={canComplaints ? <ComplaintConfigPage /> : <AccessDenied />} />
 
-            {/* Production */}
-            <Route path="production" element={<ProductionTrendsPage />} />
+            <Route path="production" element={canLabor ? <ProductionTrendsPage /> : <AccessDenied />} />
 
-            <Route path="environmental" element={<EnvironmentalTrendsPage />} />
+            <Route path="environmental" element={canEnvironmental ? <EnvironmentalTrendsPage /> : <AccessDenied />} />
 
-            <Route path="ingredients" element={<IngredientTrendsPage />} />
+            <Route path="ingredients" element={canIngredients ? <IngredientTrendsPage /> : <AccessDenied />} />
 
             <Route path="*" element={<div className="alert alert-warning">Page not found.</div>} />
           </Routes>

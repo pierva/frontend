@@ -52,7 +52,7 @@ function App() {
             </ProtectedRoute>
           } />
           <Route path="/add-log" element={
-            <ProtectedRoute allowedRoles={['admin', 'factory_team']} moduleKey="production.logs">
+            <ProtectedRoute moduleKey="production.logs">
               <AddLog />
             </ProtectedRoute>
           } />
@@ -62,90 +62,90 @@ function App() {
             </ProtectedRoute>
           } />
           <Route path="/inventory" element={
-            <ProtectedRoute allowedRoles={['admin', 'factory_team']} moduleKey="production.inventory">
+            <ProtectedRoute moduleKey="production.inventory">
               <InventoryPage />
             </ProtectedRoute>
           } />
           <Route path="/factory/orders" element={
-            <ProtectedRoute allowedRoles={['admin', 'factory_team']} moduleKey="production.orders">
+            <ProtectedRoute moduleKey="production.orders">
               <FactoryOrdersPage />
             </ProtectedRoute>
           } />
 
           {/* Admin */}
           <Route path="/admin/products" element={
-            <ProtectedRoute allowedRoles={['admin']} moduleKey="admin.products">
+            <ProtectedRoute moduleKey="admin.products">
               <AdminProductPage />
             </ProtectedRoute>
           } />
           <Route path="/admin/users" element={
-            <ProtectedRoute allowedRoles={['admin']} moduleKey="admin.users">
+            <ProtectedRoute moduleKey="admin.users">
               <AdminUserManagement />
             </ProtectedRoute>
           } />
           <Route path="/admin/customers" element={
-            <ProtectedRoute allowedRoles={['admin']} moduleKey="admin.customers">
+            <ProtectedRoute moduleKey="admin.customers">
               <AdminCustomerPage />
             </ProtectedRoute>
           } />
           <Route path="/admin/orders" element={
-            <ProtectedRoute allowedRoles={['admin']} moduleKey="admin.orders">
+            <ProtectedRoute moduleKey="admin.orders">
               <AdminOrdersPage />
             </ProtectedRoute>
           } />
 
           {/* Analytics */}
           <Route path="/trends/*" element={
-            <ProtectedRoute allowedRoles={['admin', 'qa']} moduleKey="analytics.overview">
+            <ProtectedRoute moduleKey="analytics.overview">
               <TrendsAnalyticsPage />
             </ProtectedRoute>
           } />
           <Route path="/trends/production/labor" element={
-            <ProtectedRoute allowedRoles={['admin']} moduleKey="analytics.labor">
+            <ProtectedRoute moduleKey="analytics.labor">
               <ProductionLaborPage />
             </ProtectedRoute>
           } />
           <Route path="/trends/complaints/new" element={
-            <ProtectedRoute allowedRoles={['admin', 'qa']} moduleKey="analytics.complaints">
+            <ProtectedRoute moduleKey="analytics.complaints">
               <NewComplaintPage />
             </ProtectedRoute>
           } />
           <Route path="/trends/environmental/config" element={
-            <ProtectedRoute allowedRoles={['admin', 'factory_team']} moduleKey="analytics.environmental">
+            <ProtectedRoute moduleKey="analytics.environmental">
               <EnvironmentalConfigPage />
             </ProtectedRoute>
           } />
           <Route path="/trends/environmental/new" element={
-            <ProtectedRoute allowedRoles={['admin', 'factory_team', 'qa']} moduleKey="analytics.environmental">
+            <ProtectedRoute moduleKey="analytics.environmental">
               <EnvironmentalNewATPPage />
             </ProtectedRoute>
           } />
 
           {/* CCP — Production */}
           <Route path="/ccp/baking/config" element={
-            <ProtectedRoute allowedRoles={['admin']} moduleKey="ccp.baking.config">
+            <ProtectedRoute moduleKey="ccp.baking.config">
               <BakingCcpConfigPage />
             </ProtectedRoute>
           } />
           <Route path="/ccp/baking/start" element={
-            <ProtectedRoute allowedRoles={['admin', 'factory_team']} moduleKey="ccp.baking.production">
+            <ProtectedRoute moduleKey="ccp.baking.production">
               <BakingCcpStartPage />
             </ProtectedRoute>
           } />
           <Route path="/ccp/baking/live/:runId" element={
-            <ProtectedRoute allowedRoles={['admin', 'factory_team']} moduleKey="ccp.baking.production">
+            <ProtectedRoute moduleKey="ccp.baking.production">
               <BakingCcpLivePage />
             </ProtectedRoute>
           } />
 
           {/* CCP — QA */}
           <Route path="/ccp/baking/queue" element={
-            <ProtectedRoute allowedRoles={['admin', 'qa']} moduleKey="ccp.baking.qa">
+            <ProtectedRoute moduleKey="ccp.baking.qa">
               <BakingCcpQueuePage />
             </ProtectedRoute>
           } />
           <Route path="/ccp/baking/verify/:runId" element={
-            <ProtectedRoute allowedRoles={['admin', 'qa']} moduleKey="ccp.baking.qa">
+            <ProtectedRoute moduleKey="ccp.baking.qa">
               <BakingCcpVerifyPage />
             </ProtectedRoute>
           } />

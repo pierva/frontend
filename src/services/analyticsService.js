@@ -40,12 +40,21 @@ const getEnvironmentalSummary = async (filters = {}) => {
   return response.data;
 };
 
+const getIngredientsSummary = async (filters = {}) => {
+  const response = await axios.get(`${API_URL}/api/analytics/widgets/ingredients.summary`, {
+    headers: authHeaders(),
+    params: filters,
+  });
+  return response.data;
+};
+
 const analyticsService = {
   getComplaintsSummary,
   getProductionSummary,
+  getEnvironmentalSummary,
+  getIngredientsSummary,
   getWidgetConfig,
   saveWidgetConfig,
-  getEnvironmentalSummary,
 };
 
 export default analyticsService;

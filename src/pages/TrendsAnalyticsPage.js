@@ -5,6 +5,7 @@ import ComplaintTrendsPage from './trends/ComplaintTrendsPage';
 import ComplaintConfigPage from './trends/ComplaintConfigPage';
 import ProductionTrendsPage from './trends/ProductionTrendsPage';
 import EnvironmentalTrendsPage from './trends/EnvironmentalTrendsPage';
+import IngredientTrendsPage from './trends/IngredientTrendsPage';
 
 export default function TrendsAnalyticsPage() {
   return (
@@ -34,6 +35,12 @@ export default function TrendsAnalyticsPage() {
               }>
                 Environmental
               </NavLink>
+
+              <NavLink to="ingredients" className={({ isActive }) =>
+                `list-group-item list-group-item-action ${isActive ? 'active' : ''}`
+              }>
+                Ingredients
+              </NavLink>
             </div>
           </div>
         </div>
@@ -51,6 +58,8 @@ export default function TrendsAnalyticsPage() {
             <Route path="production" element={<ProductionTrendsPage />} />
 
             <Route path="environmental" element={<EnvironmentalTrendsPage />} />
+
+            <Route path="ingredients" element={<IngredientTrendsPage />} />
 
             <Route path="*" element={<div className="alert alert-warning">Page not found.</div>} />
           </Routes>

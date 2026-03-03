@@ -53,6 +53,9 @@ export default function BakingCcpLivePage() {
   // countdown tick (packaging card updates every minute)
   const [tick, setTick] = useState(0);
 
+  // collapsed completed carts
+  const [showCompletedCarts, setShowCompletedCarts] = useState(false);
+
   const clearBanners = () => {
     setError('');
     setSuccessMsg('');
@@ -135,6 +138,9 @@ export default function BakingCcpLivePage() {
     const list = Array.isArray(run?.Carts) ? run.Carts : [];
     return [...list].sort((a, b) => (a.cartNumber || 0) - (b.cartNumber || 0));
   }, [run]);
+
+  const activeCarts = useMemo(() => carts.filter(c => !c?.blastOutAt), [carts]);
+  const completedCarts = useMemo(() => carts.filter(c => !!c?.blastOutAt), [carts]);
 
   const lastTempAt = useMemo(() => {
     const list = Array.isArray(run?.TempReadings) ? run.TempReadings : [];
@@ -947,7 +953,9 @@ export default function BakingCcpLivePage() {
                     <div className="d-flex justify-content-between align-items-center">
                       <h6 className="mb-0">Carts</h6>
                       <div className="text-muted" style={{ fontSize: 12 }}>
-                        Total carts: {carts.length}
+                        {completedCarts.length > 0
+                          ? `Active: ${activeCarts.length} | Total: ${carts.length}`
+                          : `Total carts: ${carts.length}`}
                       </div>
                     </div>
                     <div className="table-responsive mt-3">
@@ -964,11 +972,15 @@ export default function BakingCcpLivePage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {carts.length === 0 ? (
+                          {activeCarts.length === 0 && completedCarts.length === 0 ? (
                             <tr>
                               <td colSpan={7} className="text-muted">No carts yet.</td>
                             </tr>
-                          ) : carts.map((c) => {
+                          ) : activeCarts.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="text-muted">All carts have been processed.</td>
+                            </tr>
+                          ) : activeCarts.map((c) => {
                             const ovenOut = c.ovenOutAt ? new Date(c.ovenOutAt) : null;
                             const blastInAt = c.blastInAt ? new Date(c.blastInAt) : null;
                             const blastOutAt = c.blastOutAt ? new Date(c.blastOutAt) : null;
@@ -1014,6 +1026,48 @@ export default function BakingCcpLivePage() {
                         </tbody>
                       </table>
                     </div>
+
+                    {completedCarts.length > 0 && (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => setShowCompletedCarts(v => !v)}
+                        >
+                          {showCompletedCarts
+                            ? `▼ Hide ${completedCarts.length} completed cart${completedCarts.length !== 1 ? 's' : ''}`
+                            : `▶ Show ${completedCarts.length} completed cart${completedCarts.length !== 1 ? 's' : ''}`}
+                        </button>
+                        {showCompletedCarts && (
+                          <div className="table-responsive mt-2" style={{ opacity: 0.6 }}>
+                            <table className="table table-sm align-middle">
+                              <tbody>
+                                {completedCarts.map((c) => {
+                                  const ovenOut = c.ovenOutAt ? new Date(c.ovenOutAt) : null;
+                                  const blastInAt = c.blastInAt ? new Date(c.blastInAt) : null;
+                                  const blastOutAt = c.blastOutAt ? new Date(c.blastOutAt) : null;
+                                  const prodName = c?.Product?.name || productById.get(Number(c.productId))?.name || '—';
+                                  return (
+                                    <tr key={c.id}>
+                                      <td style={{ fontWeight: 900, width: 90 }}>#{c.cartNumber}</td>
+                                      <td>{prodName}</td>
+                                      <td>{c.unitsInCart ?? '—'}</td>
+                                      <td>{ovenOut ? ovenOut.toLocaleTimeString() : '—'}</td>
+                                      <td>{blastInAt ? blastInAt.toLocaleTimeString() : '—'}</td>
+                                      <td>{blastOutAt ? blastOutAt.toLocaleTimeString() : '—'}</td>
+                                      <td style={{ width: 260 }}>
+                                        <span className="badge text-bg-success">Done</span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="text-muted" style={{ fontSize: 12 }}>
                       SQF intent: carts provide a production cross-check and ensure freezer timing control.
                     </div>

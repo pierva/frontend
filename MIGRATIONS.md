@@ -1,6 +1,6 @@
 # New updates for production modules
 
-## Manual SQL Changes in DB
+## Manual SQL Changes in DB for V2
 
 ### Step 1
 Update IngredientLotCode table to support multiple ingredient lot codes. Execute the below update in the database
@@ -145,4 +145,10 @@ Add quantity to ProductIngredient table
 ALTER TABLE `ProductIngredients`
   ADD COLUMN `expectedQuantityKg` DECIMAL(10, 3) NULL
   AFTER `ingredientId`;
+```
+
+## Deactivate products in the admin product page
+
+```
+ALTER TABLE Products ADD COLUMN isActive BOOLEAN NOT NULL DEFAULT true;
 ```

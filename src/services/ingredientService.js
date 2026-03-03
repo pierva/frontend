@@ -49,6 +49,13 @@ const ingredientService = {
     );
     return response.data;
   },
+  getCurrentPrices: async () => {
+    const token = localStorage.getItem('token');
+    const response = await axios.get(`${API_URL}/api/ingredients/prices/current`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data; // [{ ingredientId, pricePerKg }]
+  },
 };
 
 

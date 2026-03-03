@@ -4,8 +4,7 @@ import companyService from '../services/companyService';
 import ingredientService from '../services/ingredientService';
 
 // ── Recipe editor ─────────────────────────────────────────────────────────────
-// recipeItems: [{ ingredientId, expectedQuantityKg }]
-function RecipeEditor({ ingredients, recipeItems, onChange }) {
+function RecipeEditor({ ingredients, recipeItems, onChange, priceMap = {} }) {
   const selectedIds = new Set(recipeItems.map(r => String(r.ingredientId)));
 
   const toggle = (ingredientId) => {
@@ -29,53 +28,83 @@ function RecipeEditor({ ingredients, recipeItems, onChange }) {
     return row ? row.expectedQuantityKg : '';
   };
 
+  // Compute estimated total cost per unit
+  let estimatedTotal = null;
+  for (const r of recipeItems) {
+    const qty = Number(r.expectedQuantityKg);
+    const price = priceMap[String(r.ingredientId)];
+    if (qty > 0 && price != null) {
+      estimatedTotal = (estimatedTotal || 0) + qty * price;
+    }
+  }
+
   return (
-    <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: 4 }}>
-      <table className="table table-sm mb-0">
-        <thead className="table-light" style={{ position: 'sticky', top: 0 }}>
-          <tr>
-            <th style={{ width: 36 }}></th>
-            <th>Ingredient</th>
-            <th>Manufacturer</th>
-            <th style={{ width: 150 }}>Qty / unit (kg)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ingredients.map(ing => {
-            const checked = selectedIds.has(String(ing.id));
-            return (
-              <tr key={ing.id} style={{ background: checked ? '#f0fff4' : undefined }}>
-                <td className="text-center">
-                  <input
-                    type="checkbox"
-                    className="form-check-input"
-                    checked={checked}
-                    onChange={() => toggle(ing.id)}
-                  />
-                </td>
-                <td style={{ fontWeight: checked ? 600 : undefined }}>{ing.name}</td>
-                <td className="text-muted" style={{ fontSize: 13 }}>{ing.manufacturer}</td>
-                <td>
-                  {checked && (
-                    <div className="input-group input-group-sm">
-                      <input
-                        type="number"
-                        className="form-control"
-                        min="0"
-                        step="0.001"
-                        placeholder="0.000"
-                        value={getQty(ing.id)}
-                        onChange={e => setQty(ing.id, e.target.value)}
-                      />
-                      <span className="input-group-text">kg</span>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div>
+      <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: 4 }}>
+        <table className="table table-sm mb-0">
+          <thead className="table-light" style={{ position: 'sticky', top: 0 }}>
+            <tr>
+              <th style={{ width: 36 }}></th>
+              <th>Ingredient</th>
+              <th>Manufacturer</th>
+              <th style={{ width: 150 }}>Qty / unit (kg)</th>
+              <th style={{ width: 110 }} className="text-end">Cost / unit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ingredients.map(ing => {
+              const checked = selectedIds.has(String(ing.id));
+              const qty = Number(getQty(ing.id));
+              const price = priceMap[String(ing.id)];
+              const cost = checked && qty > 0 && price != null ? (qty * price).toFixed(4) : null;
+              return (
+                <tr key={ing.id} style={{ background: checked ? '#f0fff4' : undefined }}>
+                  <td className="text-center">
+                    <input
+                      type="checkbox"
+                      className="form-check-input"
+                      checked={checked}
+                      onChange={() => toggle(ing.id)}
+                    />
+                  </td>
+                  <td style={{ fontWeight: checked ? 600 : undefined }}>{ing.name}</td>
+                  <td className="text-muted" style={{ fontSize: 13 }}>{ing.manufacturer}</td>
+                  <td>
+                    {checked && (
+                      <div className="input-group input-group-sm">
+                        <input
+                          type="number"
+                          className="form-control"
+                          min="0"
+                          step="0.001"
+                          placeholder="0.000"
+                          value={getQty(ing.id)}
+                          onChange={e => setQty(ing.id, e.target.value)}
+                        />
+                        <span className="input-group-text">kg</span>
+                      </div>
+                    )}
+                  </td>
+                  <td className="text-end" style={{ fontSize: 13 }}>
+                    {checked
+                      ? (cost != null
+                        ? <span className="text-success fw-semibold">${cost}</span>
+                        : <span className="text-muted">—</span>)
+                      : null}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {estimatedTotal != null && (
+        <div className="mt-2 text-end">
+          <span className="badge text-bg-secondary" style={{ fontSize: 13 }}>
+            Estimated cost / unit: ${estimatedTotal.toFixed(4)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -88,13 +117,18 @@ function AdminProductPage() {
   const [products, setProducts] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [ingredients, setIngredients] = useState([]);
+  const [currentPrices, setCurrentPrices] = useState({});
+  const [recipeCosts, setRecipeCosts] = useState({});
 
+  const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [newProductCompanyId, setNewProductCompanyId] = useState('');
+  const [newDefaultUnitsPerCart, setNewDefaultUnitsPerCart] = useState('');
   const [newRecipe, setNewRecipe] = useState([]);
 
   const [editProductId, setEditProductId] = useState(null);
   const [editProductName, setEditProductName] = useState('');
   const [editCompanyId, setEditCompanyId] = useState('');
+  const [editDefaultUnitsPerCart, setEditDefaultUnitsPerCart] = useState('');
   const [editRecipe, setEditRecipe] = useState([]);
   const [showEditModal, setShowEditModal] = useState(false);
 
@@ -105,15 +139,19 @@ function AdminProductPage() {
   const [loadingPrices, setLoadingPrices] = useState(false);
   const [newPrice, setNewPrice] = useState({ pricePerKg: '', effectiveDate: '', note: '', unit: 'kg' });
 
+  const [companiesOpen, setCompaniesOpen] = useState(false);
+
   useEffect(() => {
     loadProducts();
     loadCompanies();
     loadIngredients();
+    loadCurrentPrices();
+    loadRecipeCosts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadProducts = async () => {
-    try { setProducts(await productService.getProducts()); }
+    try { setProducts(await productService.getProducts({ includeInactive: true })); }
     catch { showAlert('Error loading products.', 'danger'); }
   };
 
@@ -127,20 +165,36 @@ function AdminProductPage() {
     catch { showAlert('Error loading ingredients.', 'danger'); }
   };
 
+  const loadCurrentPrices = async () => {
+    try {
+      const rows = await ingredientService.getCurrentPrices();
+      const map = {};
+      for (const r of rows) map[String(r.ingredientId)] = r.pricePerKg;
+      setCurrentPrices(map);
+    } catch { /* non-critical */ }
+  };
+
+  const loadRecipeCosts = async () => {
+    try {
+      const rows = await productService.getRecipeCosts();
+      const map = {};
+      for (const r of rows) map[r.productId] = r.estimatedCostPerUnit;
+      setRecipeCosts(map);
+    } catch { /* non-critical */ }
+  };
+
   const showAlert = (msg, type) => {
     setMessage(msg);
     setMessageType(type);
     setTimeout(() => { setMessage(''); setMessageType(''); }, 4000);
   };
 
-  // Normalize recipe returned by the API into [{ ingredientId, expectedQuantityKg }]
   const normalizeRecipe = (raw) =>
     raw.map(item => ({
       ingredientId: item.ingredientId ?? item,
       expectedQuantityKg: item.expectedQuantityKg ?? '',
     }));
 
-  // Prepare recipe for API — convert empty string qty to null
   const prepareRecipe = (recipe) =>
     recipe.map(r => ({
       ingredientId: Number(r.ingredientId),
@@ -160,12 +214,15 @@ function AdminProductPage() {
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     try {
-      await productService.createProduct(productName, newProductCompanyId, prepareRecipe(newRecipe));
+      await productService.createProduct(productName, newProductCompanyId, prepareRecipe(newRecipe), newDefaultUnitsPerCart);
       showAlert('Product created successfully!', 'success');
       setProductName('');
       setNewProductCompanyId('');
+      setNewDefaultUnitsPerCart('');
       setNewRecipe([]);
+      setShowCreateProduct(false);
       loadProducts();
+      loadRecipeCosts();
     } catch { showAlert('Error creating product.', 'danger'); }
   };
 
@@ -173,6 +230,7 @@ function AdminProductPage() {
     setEditProductId(product.id);
     setEditProductName(product.name);
     setEditCompanyId(product.Company ? product.Company.id : '');
+    setEditDefaultUnitsPerCart(product.defaultUnitsPerCart != null ? String(product.defaultUnitsPerCart) : '');
     try {
       const raw = await productService.getProductRecipe(product.id);
       setEditRecipe(normalizeRecipe(raw));
@@ -182,11 +240,20 @@ function AdminProductPage() {
 
   const saveEdit = async () => {
     try {
-      await productService.updateProduct(editProductId, editProductName, editCompanyId, prepareRecipe(editRecipe));
+      await productService.updateProduct(editProductId, editProductName, editCompanyId, prepareRecipe(editRecipe), editDefaultUnitsPerCart);
       showAlert('Product updated successfully!', 'success');
       setShowEditModal(false);
       loadProducts();
+      loadRecipeCosts();
     } catch { showAlert('Error updating product.', 'danger'); }
+  };
+
+  const handleToggleActive = async (product) => {
+    try {
+      const { isActive } = await productService.toggleActive(product.id);
+      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, isActive } : p));
+      showAlert(`Product ${isActive ? 'reactivated' : 'deactivated'}.`, 'success');
+    } catch { showAlert('Error updating product status.', 'danger'); }
   };
 
   const handleIngredientSubmit = async (e) => {
@@ -238,11 +305,25 @@ function AdminProductPage() {
       setPriceHistory(prev => [entry, ...prev]);
       setNewPrice({ pricePerKg: '', effectiveDate: '', note: '', unit: newPrice.unit });
       showAlert('Price recorded.', 'success');
+      loadCurrentPrices();
+      loadRecipeCosts();
     } catch { showAlert('Error recording price.', 'danger'); }
   };
 
+  const cardHeader = (text) => (
+    <div className="card-header text-white d-flex align-items-center" style={{ backgroundColor: '#1b2638' }}>
+      <strong>{text}</strong>
+    </div>
+  );
+
+  const fmtCost = (productId) => {
+    const cost = recipeCosts[productId];
+    if (cost == null) return <span className="text-muted">—</span>;
+    return <span className="badge text-bg-light border">${Number(cost).toFixed(4)}</span>;
+  };
+
   return (
-    <div className="container mt-5 pb-5">
+    <div className="container mt-4 pb-5">
       {message && (
         <div className={`alert alert-${messageType} alert-dismissible fade show fixed-top w-50 mx-auto mt-3`} role="alert" style={{ zIndex: 1050 }}>
           {message}
@@ -250,74 +331,181 @@ function AdminProductPage() {
         </div>
       )}
 
-      {/* ── Company Form ── */}
-      <h2>Create New Company</h2>
-      <form onSubmit={handleCompanySubmit} className="mb-5">
-        <div className="form-group">
-          <label>Company Name</label>
-          <input name="companyName" type="text" className="form-control" required />
-        </div>
-        <button type="submit" className="btn btn-primary mt-3">Create Company</button>
-      </form>
+      {/* ── Products card ── */}
+      <div className="card mb-4">
+        {cardHeader('Products')}
+        <div className="card-body">
 
-      {/* ── Product Form ── */}
-      <h2>Create New Product</h2>
-      <form onSubmit={handleProductSubmit} className="mb-5">
-        <div className="row g-3">
-          <div className="col-md-6">
-            <label className="form-label">Product Name</label>
-            <input type="text" className="form-control" value={productName} onChange={e => setProductName(e.target.value)} required />
+          {/* Toggle create form */}
+          <div className="mb-3">
+            <button
+              className="btn btn-outline-primary btn-sm"
+              onClick={() => setShowCreateProduct(v => !v)}
+            >
+              {showCreateProduct ? '− Cancel' : '+ New Product'}
+            </button>
           </div>
-          <div className="col-md-6">
-            <label className="form-label">Company</label>
-            <select className="form-select" value={newProductCompanyId} onChange={e => setNewProductCompanyId(e.target.value)} required>
-              <option value="">Select Company</option>
-              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="mt-3">
-          <label className="form-label">
-            Recipe <small className="text-muted">— check ingredients and enter the expected quantity per unit produced</small>
-          </label>
-          <RecipeEditor ingredients={ingredients} recipeItems={newRecipe} onChange={setNewRecipe} />
-        </div>
-        <button type="submit" className="btn btn-primary mt-3">Create Product</button>
-      </form>
 
-      {/* ── Ingredient Form ── */}
-      <h2 className="mt-2">Create New Ingredient</h2>
-      <form onSubmit={handleIngredientSubmit} className="mb-3">
-        <div className="row g-3">
-          <div className="col-md-6">
-            <label className="form-label">Ingredient Name</label>
-            <input type="text" className="form-control" value={ingredientName} onChange={e => setIngredientName(e.target.value)} required />
-          </div>
-          <div className="col-md-6">
-            <label className="form-label">Manufacturer</label>
-            <input type="text" className="form-control" value={manufacturer} onChange={e => setManufacturer(e.target.value)} required />
+          {showCreateProduct && (
+            <form onSubmit={handleProductSubmit} className="mb-4 p-3 border rounded bg-light">
+              <div className="row g-3 mb-3">
+                <div className="col-md-5">
+                  <label className="form-label">Product Name</label>
+                  <input type="text" className="form-control" value={productName} onChange={e => setProductName(e.target.value)} required />
+                </div>
+                <div className="col-md-5">
+                  <label className="form-label">Company</label>
+                  <select className="form-select" value={newProductCompanyId} onChange={e => setNewProductCompanyId(e.target.value)} required>
+                    <option value="">Select Company</option>
+                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div className="col-md-2">
+                  <label className="form-label">Default units / cart <small className="text-muted">(optional)</small></label>
+                  <input
+                    type="number" min="1" step="1" className="form-control"
+                    placeholder="e.g. 12"
+                    value={newDefaultUnitsPerCart}
+                    onChange={e => setNewDefaultUnitsPerCart(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="mb-3">
+                <label className="form-label">
+                  Recipe <small className="text-muted">— check ingredients and enter the expected quantity per unit produced</small>
+                </label>
+                <RecipeEditor ingredients={ingredients} recipeItems={newRecipe} onChange={setNewRecipe} priceMap={currentPrices} />
+              </div>
+              <button type="submit" className="btn btn-primary btn-sm">Create Product</button>
+            </form>
+          )}
+
+          {/* Product list table */}
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table table-sm table-bordered mb-0">
+              <thead className="table-light">
+                <tr>
+                  <th>Product Name</th>
+                  <th>Company</th>
+                  <th className="text-end" style={{ width: 140 }}>Est. Cost / unit</th>
+                  <th style={{ width: 80 }} className="text-center">Status</th>
+                  <th style={{ width: 140 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.length === 0 && (
+                  <tr><td colSpan={5} className="text-muted text-center">No products yet.</td></tr>
+                )}
+                {products.map(product => (
+                  <tr key={product.id} style={product.isActive ? undefined : { opacity: 0.55 }}>
+                    <td>{product.name}</td>
+                    <td className="text-muted">{product.Company?.name ?? '—'}</td>
+                    <td className="text-end">{fmtCost(product.id)}</td>
+                    <td className="text-center">
+                      {product.isActive
+                        ? <span className="badge text-bg-success">Active</span>
+                        : <span className="badge text-bg-secondary">Inactive</span>}
+                    </td>
+                    <td className="text-center">
+                      <div className="d-flex gap-1 justify-content-center">
+                        {product.isActive && (
+                          <button className="btn btn-outline-primary btn-sm" onClick={() => startEdit(product)}>Edit</button>
+                        )}
+                        <button
+                          className={`btn btn-sm ${product.isActive ? 'btn-outline-warning' : 'btn-outline-success'}`}
+                          onClick={() => handleToggleActive(product)}
+                        >
+                          {product.isActive ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-        <div className="d-flex gap-2 mt-3">
-          <button type="submit" className="btn btn-primary">Create Ingredient</button>
-          <button type="button" className="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#ingredientsModal">
-            Show Ingredients
-          </button>
+      </div>
+
+      {/* ── Ingredients card ── */}
+      <div className="card mb-4">
+        {cardHeader('Ingredients')}
+        <div className="card-body">
+          <form onSubmit={handleIngredientSubmit}>
+            <div className="row g-3 align-items-end">
+              <div className="col-md-5">
+                <label className="form-label">Ingredient Name</label>
+                <input type="text" className="form-control" value={ingredientName} onChange={e => setIngredientName(e.target.value)} required />
+              </div>
+              <div className="col-md-5">
+                <label className="form-label">Manufacturer</label>
+                <input type="text" className="form-control" value={manufacturer} onChange={e => setManufacturer(e.target.value)} required />
+              </div>
+              <div className="col-md-2 d-flex gap-2">
+                <button type="submit" className="btn btn-primary btn-sm">Add</button>
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary btn-sm"
+                  data-bs-toggle="modal"
+                  data-bs-target="#ingredientsModal"
+                >
+                  Manage
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
-      </form>
+      </div>
+
+      {/* ── Companies card (collapsed by default) ── */}
+      <div className="card mb-4">
+        <div
+          className="card-header text-white d-flex align-items-center justify-content-between"
+          style={{ backgroundColor: '#1b2638', cursor: 'pointer' }}
+          onClick={() => setCompaniesOpen(v => !v)}
+        >
+          <strong>Companies</strong>
+          <span style={{ fontSize: 12 }}>{companiesOpen ? '▲' : '▼'}</span>
+        </div>
+        {companiesOpen && (
+          <div className="card-body">
+            <form onSubmit={handleCompanySubmit} className="mb-3">
+              <div className="row g-3 align-items-end">
+                <div className="col-md-8">
+                  <label className="form-label">Company Name</label>
+                  <input name="companyName" type="text" className="form-control" required />
+                </div>
+                <div className="col-md-4">
+                  <button type="submit" className="btn btn-primary btn-sm">Create Company</button>
+                </div>
+              </div>
+            </form>
+            <table className="table table-sm table-bordered mb-0">
+              <thead className="table-light">
+                <tr><th>Name</th></tr>
+              </thead>
+              <tbody>
+                {companies.map(c => (
+                  <tr key={c.id}><td>{c.name}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* ── Ingredients Modal ── */}
       <div className="modal fade" id="ingredientsModal" tabIndex="-1">
         <div className="modal-dialog modal-lg">
           <div className="modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Ingredients</h5>
-              <button type="button" className="btn-close" data-bs-dismiss="modal" />
+            <div className="modal-header" style={{ backgroundColor: '#1b2638' }}>
+              <h5 className="modal-title text-white">Manage Ingredients</h5>
+              <button type="button" className="btn-close btn-close-white" data-bs-dismiss="modal" />
             </div>
             <div className="modal-body">
-              <table className="table table-bordered mb-0">
-                <thead>
-                  <tr><th>Name</th><th>Manufacturer</th><th>Actions</th></tr>
+              <table className="table table-sm table-bordered mb-0">
+                <thead className="table-light">
+                  <tr><th>Name</th><th>Manufacturer</th><th style={{ width: 80 }}></th></tr>
                 </thead>
                 <tbody>
                   {ingredients.map(ing => (
@@ -332,11 +520,11 @@ function AdminProductPage() {
                           ? <input type="text" className="form-control form-control-sm" value={editIngredient.manufacturer} onChange={e => setEditIngredient({ ...editIngredient, manufacturer: e.target.value })} />
                           : ing.manufacturer}
                       </td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
+                      <td className="text-center" style={{ whiteSpace: 'nowrap' }}>
                         {editIngredient?.id === ing.id ? (
                           <button className="btn btn-success btn-sm" onClick={() => handleIngredientUpdate(ing.id)}>Save</button>
                         ) : (
-                          <button className="btn btn-primary btn-sm" onClick={() => startEditIngredient(ing)}>Edit</button>
+                          <button className="btn btn-outline-primary btn-sm" onClick={() => startEditIngredient(ing)}>Edit</button>
                         )}
                       </td>
                     </tr>
@@ -344,19 +532,16 @@ function AdminProductPage() {
                 </tbody>
               </table>
 
-              {/* ── Price history panel (shown when an ingredient is being edited) ── */}
+              {/* Price history panel */}
               {editIngredient && (
                 <div className="mt-4 p-3 border rounded bg-light">
                   <h6 className="mb-3">
                     Price History — <strong>{editIngredient.name}</strong>
                   </h6>
 
-                  {/* Add new price */}
                   <div className="row g-2 align-items-end mb-3">
                     <div className="col-auto">
-                      <label className="form-label mb-1" style={{ fontSize: 12 }}>
-                        Price / {newPrice.unit}
-                      </label>
+                      <label className="form-label mb-1" style={{ fontSize: 12 }}>Price / {newPrice.unit}</label>
                       <div className="input-group input-group-sm">
                         <span className="input-group-text">$</span>
                         <input
@@ -405,7 +590,6 @@ function AdminProductPage() {
                     </div>
                   </div>
 
-                  {/* History table */}
                   {loadingPrices ? (
                     <div className="text-muted" style={{ fontSize: 13 }}>Loading…</div>
                   ) : priceHistory.length === 0 ? (
@@ -437,51 +621,47 @@ function AdminProductPage() {
         </div>
       </div>
 
-      {/* ── Product List ── */}
-      <h3 className="mt-5">Available Products</h3>
-      <table className="table table-bordered mt-3">
-        <thead>
-          <tr><th>ID</th><th>Product Name</th><th>Company</th><th>Actions</th></tr>
-        </thead>
-        <tbody>
-          {products.map(product => (
-            <tr key={product.id}>
-              <td>{product.id}</td>
-              <td>{product.name}</td>
-              <td>{product.Company?.name ?? product.companyId}</td>
-              <td><button className="btn btn-primary btn-sm" onClick={() => startEdit(product)}>Edit</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
       {/* ── Product Edit Modal ── */}
       {showEditModal && (
         <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }} tabIndex="-1">
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Edit Product — {editProductName}</h5>
-                <button type="button" className="btn-close" onClick={() => setShowEditModal(false)} />
+              <div className="modal-header" style={{ backgroundColor: '#1b2638' }}>
+                <h5 className="modal-title text-white">Edit Product — {editProductName}</h5>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowEditModal(false)} />
               </div>
               <div className="modal-body">
-                <div className="row g-3 mb-3">
-                  <div className="col-md-6">
+                <div className="row g-3 mb-4">
+                  <div className="col-md-5">
                     <label className="form-label">Product Name</label>
                     <input type="text" className="form-control" value={editProductName} onChange={e => setEditProductName(e.target.value)} />
                   </div>
-                  <div className="col-md-6">
+                  <div className="col-md-4">
                     <label className="form-label">Company</label>
                     <select className="form-select" value={editCompanyId} onChange={e => setEditCompanyId(e.target.value)}>
                       <option value="">Select Company</option>
                       {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
+                  <div className="col-md-3">
+                    <label className="form-label">Default units / cart</label>
+                    <input
+                      type="number" min="1" step="1" className="form-control"
+                      placeholder="e.g. 40"
+                      value={editDefaultUnitsPerCart}
+                      onChange={e => setEditDefaultUnitsPerCart(e.target.value)}
+                    />
+                  </div>
                 </div>
                 <label className="form-label">
                   Recipe <small className="text-muted">— expected quantity per unit produced</small>
                 </label>
-                <RecipeEditor ingredients={ingredients} recipeItems={editRecipe} onChange={setEditRecipe} />
+                <RecipeEditor
+                  ingredients={ingredients}
+                  recipeItems={editRecipe}
+                  onChange={setEditRecipe}
+                  priceMap={currentPrices}
+                />
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>Cancel</button>

@@ -178,6 +178,15 @@ export default function BakingCcpLivePage() {
     return m;
   }, [products]);
 
+  // Products selected at run start — used for quick-select buttons in cart modal.
+  // Falls back to the single primary product for runs created before this field existed.
+  const scheduledProducts = useMemo(() => {
+    const ids = Array.isArray(run?.scheduledProductIdsJson) && run.scheduledProductIdsJson.length > 0
+      ? run.scheduledProductIdsJson
+      : run?.productId ? [run.productId] : [];
+    return ids.map(id => productById.get(Number(id))).filter(Boolean);
+  }, [run?.scheduledProductIdsJson, run?.productId, productById]);
+
   const freezerCarts = useMemo(() => {
     return carts.filter(c => c?.blastInAt && !c?.blastOutAt);
   }, [carts]);
@@ -328,7 +337,11 @@ export default function BakingCcpLivePage() {
 
   const openCartModal = () => {
     clearBanners();
-    const defaultPid = run?.productId ? String(run.productId) : '';
+    // Default to the last cart's product (most recently used), fall back to first scheduled product
+    const lastCart = carts.length > 0 ? carts[carts.length - 1] : null;
+    const defaultPid = lastCart
+      ? String(lastCart.productId)
+      : (scheduledProducts[0] ? String(scheduledProducts[0].id) : (run?.productId ? String(run.productId) : ''));
     setCartProductId(defaultPid);
     const p = defaultPid ? productById.get(Number(defaultPid)) : null;
     setCartUnits(p?.defaultUnitsPerCart != null ? String(p.defaultUnitsPerCart) : '');
@@ -1095,7 +1108,31 @@ export default function BakingCcpLivePage() {
                   <button type="button" className="btn-close" onClick={() => setShowCartModal(false)} />
                 </div>
                 <div className="modal-body">
-                  <label className="form-label mb-1">Product</label>
+                  {scheduledProducts.length > 0 && (
+                    <div className="mb-3">
+                      <label className="form-label mb-2 fw-semibold">Today's Schedule</label>
+                      <div className="d-flex flex-wrap gap-2">
+                        {scheduledProducts.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className={`btn btn-lg ${Number(cartProductId) === p.id ? 'btn-primary' : 'btn-outline-primary'}`}
+                            style={{ fontWeight: 700 }}
+                            onClick={() => {
+                              setCartProductId(String(p.id));
+                              if (p.defaultUnitsPerCart != null) setCartUnits(String(p.defaultUnitsPerCart));
+                            }}
+                          >
+                            {p.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <label className="form-label mb-1">
+                    {scheduledProducts.length > 0 ? 'Other product' : 'Product'}
+                  </label>
                   <select
                     className="form-select"
                     value={cartProductId}

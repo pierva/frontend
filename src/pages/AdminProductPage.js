@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import productService from '../services/productService';
 import companyService from '../services/companyService';
 import ingredientService from '../services/ingredientService';
+import analyticsService from '../services/analyticsService';
 
 // ── Recipe editor ─────────────────────────────────────────────────────────────
 function RecipeEditor({ ingredients, recipeItems, onChange, priceMap = {} }) {
@@ -147,6 +148,23 @@ function AdminProductPage() {
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
 
+  // ── Price calculator ──────────────────────────────────────────────────────────
+  const [showCalcModal, setShowCalcModal] = useState(false);
+  const [calcMode, setCalcMode] = useState('product');
+  const [calcProductId, setCalcProductId] = useState('');
+  const [calcCustomRecipe, setCalcCustomRecipe] = useState([]);
+  const [mfgSellPrice, setMfgSellPrice] = useState('');
+  const [mfgGM, setMfgGM] = useState('');
+  const [distMarkup, setDistMarkup] = useState('');
+  const [distSellPrice, setDistSellPrice] = useState('');
+  const [retailMarkup, setRetailMarkup] = useState('');
+  const [retailPrice, setRetailPrice] = useState('');
+  const [calcExtraCost, setCalcExtraCost] = useState('');
+  const [calcLaborMode, setCalcLaborMode] = useState('db');
+  const [calcLaborDays, setCalcLaborDays] = useState(null);
+  const [calcLaborCost, setCalcLaborCost] = useState('');
+  const [calcLaborLoading, setCalcLaborLoading] = useState(false);
+
   useEffect(() => {
     loadProducts();
     loadCompanies();
@@ -191,6 +209,138 @@ function AdminProductPage() {
       setRecipeCosts(costMap);
       setRecipeWeights(weightMap);
     } catch { /* non-critical */ }
+  };
+
+  // ── Price calculator logic ────────────────────────────────────────────────────
+  const calcBaseCost = useMemo(() => {
+    if (calcMode === 'product') {
+      if (!calcProductId) return null;
+      const c = recipeCosts[String(calcProductId)];
+      return c != null ? Number(c) : null;
+    }
+    let total = null;
+    for (const r of calcCustomRecipe) {
+      const qty = Number(r.expectedQuantityKg);
+      const price = currentPrices[String(r.ingredientId)];
+      if (qty > 0 && price != null) total = (total ?? 0) + qty * price;
+    }
+    return total;
+  }, [calcMode, calcProductId, recipeCosts, calcCustomRecipe, currentPrices]);
+
+  const calcTotalCost = calcBaseCost != null
+    ? calcBaseCost + (Number(calcExtraCost) || 0) + (Number(calcLaborCost) || 0)
+    : null;
+
+  const fetchLaborCost = async (days) => {
+    setCalcLaborDays(days);
+    setCalcLaborLoading(true);
+    setCalcLaborCost('');
+    calcResetPricing();
+    try {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(end.getDate() - days);
+      const fmt = d => d.toISOString().slice(0, 10);
+      const params = { startDate: fmt(start), endDate: fmt(end) };
+      if (calcMode === 'product' && calcProductId) params.productId = calcProductId;
+      const data = await analyticsService.getProductionSummary(params);
+      const val = data?.kpis?.laborCostPerUnit;
+      setCalcLaborCost(val != null ? String(Number(val).toFixed(4)) : '');
+    } catch { setCalcLaborCost(''); }
+    finally { setCalcLaborLoading(false); }
+  };
+
+  const calcResetPricing = () => {
+    setMfgSellPrice(''); setMfgGM('');
+    setDistMarkup(''); setDistSellPrice('');
+    setRetailMarkup(''); setRetailPrice('');
+  };
+
+  const calcHandleMfgPrice = (val) => {
+    setMfgSellPrice(val);
+    const p = Number(val);
+    const cost = calcTotalCost;
+    if (p > 0 && cost != null && cost > 0) {
+      setMfgGM(((p - cost) / p * 100).toFixed(1));
+    } else { setMfgGM(''); }
+    // cascade downstream
+    const dm = Number(distMarkup);
+    if (p > 0 && dm > 0) {
+      const dp = p * (1 + dm / 100);
+      setDistSellPrice(dp.toFixed(4));
+      const rm = Number(retailMarkup);
+      if (rm > 0) setRetailPrice((dp * (1 + rm / 100)).toFixed(4));
+    } else if (p > 0) {
+      const rm = Number(retailMarkup);
+      if (rm > 0) setRetailPrice((p * (1 + rm / 100)).toFixed(4));
+    }
+  };
+
+  const calcHandleMfgGM = (val) => {
+    setMfgGM(val);
+    const gm = Number(val);
+    const cost = calcTotalCost;
+    if (gm >= 0 && gm < 100 && cost != null && cost > 0) {
+      const p = cost / (1 - gm / 100);
+      setMfgSellPrice(p.toFixed(4));
+      const dm = Number(distMarkup);
+      if (dm > 0) {
+        const dp = p * (1 + dm / 100);
+        setDistSellPrice(dp.toFixed(4));
+        const rm = Number(retailMarkup);
+        if (rm > 0) setRetailPrice((dp * (1 + rm / 100)).toFixed(4));
+      } else {
+        const rm = Number(retailMarkup);
+        if (rm > 0) setRetailPrice((p * (1 + rm / 100)).toFixed(4));
+      }
+    } else { setMfgSellPrice(''); }
+  };
+
+  const calcHandleDistMarkup = (val) => {
+    setDistMarkup(val);
+    const mfgNum = Number(mfgSellPrice);
+    if (mfgNum > 0 && val !== '') {
+      const dp = mfgNum * (1 + Number(val) / 100);
+      setDistSellPrice(dp.toFixed(4));
+      const rm = Number(retailMarkup);
+      if (rm > 0) setRetailPrice((dp * (1 + rm / 100)).toFixed(4));
+    } else {
+      setDistSellPrice('');
+      const rm = Number(retailMarkup);
+      if (mfgNum > 0 && rm > 0) setRetailPrice((mfgNum * (1 + rm / 100)).toFixed(4));
+    }
+  };
+
+  const calcHandleDistPrice = (val) => {
+    setDistSellPrice(val);
+    const mfgNum = Number(mfgSellPrice);
+    if (mfgNum > 0 && val !== '') {
+      const p = Number(val);
+      setDistMarkup(p > mfgNum ? ((p - mfgNum) / mfgNum * 100).toFixed(1) : '');
+      const rm = Number(retailMarkup);
+      if (p > 0 && rm > 0) setRetailPrice((p * (1 + rm / 100)).toFixed(4));
+    } else { setDistMarkup(''); }
+  };
+
+  const calcHandleRetailMarkup = (val) => {
+    setRetailMarkup(val);
+    const distNum = Number(distSellPrice);
+    const mfgNum = Number(mfgSellPrice);
+    const base = distNum > 0 ? distNum : mfgNum;
+    if (base > 0 && val !== '') {
+      setRetailPrice((base * (1 + Number(val) / 100)).toFixed(4));
+    } else { setRetailPrice(''); }
+  };
+
+  const calcHandleRetailPrice = (val) => {
+    setRetailPrice(val);
+    const distNum = Number(distSellPrice);
+    const mfgNum = Number(mfgSellPrice);
+    const base = distNum > 0 ? distNum : mfgNum;
+    if (base > 0 && val !== '') {
+      const p = Number(val);
+      setRetailMarkup(p > 0 ? ((p - base) / base * 100).toFixed(1) : '');
+    } else { setRetailMarkup(''); }
   };
 
   const showAlert = (msg, type) => {
@@ -395,6 +545,12 @@ function AdminProductPage() {
                 {showDeactivated ? 'Hide Deactivated' : `Deactivated (${inactiveProducts.length})`}
               </button>
             )}
+            <button
+              className="btn btn-outline-info btn-sm ms-auto"
+              onClick={() => setShowCalcModal(true)}
+            >
+              $ Price Calculator
+            </button>
           </div>
 
           {showCreateProduct && (
@@ -745,6 +901,311 @@ function AdminProductPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Price Calculator Modal ── */}
+      {showCalcModal && (
+        <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }} tabIndex="-1">
+          <div className="modal-dialog modal-xl">
+            <div className="modal-content">
+              <div className="modal-header" style={{ backgroundColor: '#1b2638' }}>
+                <h5 className="modal-title text-white">$ Price Calculator</h5>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowCalcModal(false)} />
+              </div>
+              <div className="modal-body">
+                <div className="row g-4">
+
+                  {/* ── Left: source ── */}
+                  <div className="col-12 col-lg-6">
+                    <div className="btn-group w-100 mb-3" role="group">
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${calcMode === 'product' ? 'btn-dark' : 'btn-outline-dark'}`}
+                        onClick={() => { setCalcMode('product'); setCalcCustomRecipe([]); calcResetPricing(); }}
+                      >
+                        Existing Product
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${calcMode === 'custom' ? 'btn-dark' : 'btn-outline-dark'}`}
+                        onClick={() => { setCalcMode('custom'); setCalcProductId(''); calcResetPricing(); }}
+                      >
+                        Custom Recipe
+                      </button>
+                    </div>
+
+                    {calcMode === 'product' ? (
+                      <div>
+                        <label className="form-label">Select Product</label>
+                        <select
+                          className="form-select"
+                          value={calcProductId}
+                          onChange={e => { setCalcProductId(e.target.value); calcResetPricing(); }}
+                        >
+                          <option value="">— pick a product —</option>
+                          {activeProducts.map(p => (
+                            <option key={p.id} value={String(p.id)}>
+                              {p.name}{recipeCosts[p.id] != null ? ` — $${Number(recipeCosts[p.id]).toFixed(4)}/unit` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {calcProductId && recipeCosts[String(calcProductId)] == null && (
+                          <div className="text-warning mt-1" style={{ fontSize: 12 }}>No recipe cost available — add ingredient prices first.</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="form-label">Build Custom Recipe</label>
+                        <RecipeEditor
+                          ingredients={ingredients}
+                          recipeItems={calcCustomRecipe}
+                          onChange={items => { setCalcCustomRecipe(items); calcResetPricing(); }}
+                          priceMap={currentPrices}
+                        />
+                      </div>
+                    )}
+
+                    {/* Base cost + extra cost */}
+                    <div className="mt-3 p-3 rounded" style={{ background: '#f8f9fa', border: '1px solid #dee2e6' }}>
+                      <div className="text-muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>Cost of Goods</div>
+                      {calcBaseCost != null && (
+                        <div className="text-muted" style={{ fontSize: 12 }}>
+                          Recipe: ${Number(calcBaseCost).toFixed(4)}
+                        </div>
+                      )}
+                      <div className="mt-2 mb-2">
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>Additional Cost / unit <span className="text-muted">(e.g. packaging)</span></label>
+                        <div className="input-group input-group-sm">
+                          <span className="input-group-text">$</span>
+                          <input
+                            type="number" min="0" step="0.0001" className="form-control"
+                            placeholder="0.0000" value={calcExtraCost}
+                            onChange={e => { setCalcExtraCost(e.target.value); calcResetPricing(); }}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 30, fontWeight: 900, lineHeight: 1.2 }}>
+                        {calcTotalCost != null
+                          ? <><span>${Number(calcTotalCost).toFixed(4)}</span><span className="text-muted ms-1" style={{ fontSize: 14 }}>/ unit total</span></>
+                          : <span className="text-muted" style={{ fontSize: 20 }}>—</span>}
+                      </div>
+                    </div>
+                    {/* Labor cost card */}
+                    <div className="mt-2 p-3 rounded" style={{ background: '#f8f9fa', border: '1px solid #dee2e6' }}>
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <div className="text-muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>Labor Cost / unit</div>
+                        <div className="btn-group btn-group-sm">
+                          <button
+                            className={`btn btn-outline-secondary${calcLaborMode === 'db' ? ' active' : ''}`}
+                            onClick={() => { setCalcLaborMode('db'); setCalcLaborCost(''); setCalcLaborDays(null); calcResetPricing(); }}
+                          >From DB</button>
+                          <button
+                            className={`btn btn-outline-secondary${calcLaborMode === 'manual' ? ' active' : ''}`}
+                            onClick={() => { setCalcLaborMode('manual'); setCalcLaborCost(''); setCalcLaborDays(null); calcResetPricing(); }}
+                          >Manual</button>
+                        </div>
+                      </div>
+
+                      {calcLaborMode === 'db' ? (
+                        <div>
+                          <div className="text-muted mb-2" style={{ fontSize: 12 }}>
+                            Select a period to fetch the average labor cost / unit
+                            {calcMode === 'product' && calcProductId
+                              ? ' for the selected product'
+                              : ' across all products'}:
+                          </div>
+                          <div className="btn-group btn-group-sm mb-2">
+                            {[30, 60, 90, 120, 360].map(d => (
+                              <button
+                                key={d}
+                                className={`btn btn-outline-primary${calcLaborDays === d ? ' active' : ''}`}
+                                onClick={() => fetchLaborCost(d)}
+                                disabled={calcLaborLoading}
+                              >{d}d</button>
+                            ))}
+                          </div>
+                          {calcLaborLoading && (
+                            <div className="text-muted" style={{ fontSize: 12 }}>Fetching…</div>
+                          )}
+                          {!calcLaborLoading && calcLaborDays && (
+                            calcLaborCost
+                              ? <div style={{ fontSize: 18, fontWeight: 700 }}>${Number(calcLaborCost).toFixed(4)} <span className="text-muted" style={{ fontSize: 12 }}>/ unit (last {calcLaborDays}d)</span></div>
+                              : <div className="text-warning" style={{ fontSize: 12 }}>No labor data found for this period.</div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="input-group input-group-sm">
+                          <span className="input-group-text">$</span>
+                          <input
+                            type="number" min="0" step="0.0001" className="form-control"
+                            placeholder="0.0000" value={calcLaborCost}
+                            onChange={e => { setCalcLaborCost(e.target.value); calcResetPricing(); }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Right: pricing chain ── */}
+                  <div className="col-12 col-lg-6">
+                    <p className="text-muted" style={{ fontSize: 12 }}>
+                      Enter either the price <strong>or</strong> the margin/markup — the other is computed automatically.
+                      Changing the manufacturer price cascades down.
+                    </p>
+
+                    {/* Manufacturer */}
+                    <div className="rounded p-3 mb-1" style={{ border: '1px solid #dee2e6', borderLeft: '4px solid #0d6efd' }}>
+                      <div className="fw-bold mb-2" style={{ fontSize: 12, color: '#0d6efd', textTransform: 'uppercase', letterSpacing: 1 }}>Manufacturer</div>
+                      {calcTotalCost != null && (
+                        <div className="text-muted mb-2" style={{ fontSize: 12 }}>Cost: <strong>${Number(calcTotalCost).toFixed(4)}</strong></div>
+                      )}
+                      <div className="row g-2">
+                        <div className="col-6">
+                          <label className="form-label mb-1" style={{ fontSize: 12 }}>Sell Price</label>
+                          <div className="input-group input-group-sm">
+                            <span className="input-group-text">$</span>
+                            <input type="number" min="0" step="0.0001" className="form-control"
+                              placeholder="0.0000" value={mfgSellPrice}
+                              onChange={e => calcHandleMfgPrice(e.target.value)}
+                              disabled={calcBaseCost == null} />
+                          </div>
+                        </div>
+                        <div className="col-6">
+                          <label className="form-label mb-1" style={{ fontSize: 12 }}>Gross Margin</label>
+                          <div className="input-group input-group-sm">
+                            <input type="number" min="0" max="99.9" step="0.1" className="form-control"
+                              placeholder="0.0" value={mfgGM}
+                              onChange={e => calcHandleMfgGM(e.target.value)}
+                              disabled={calcBaseCost == null} />
+                            <span className="input-group-text">%</span>
+                          </div>
+                        </div>
+                      </div>
+                      {calcBaseCost == null && (
+                        <div className="text-muted mt-2" style={{ fontSize: 12 }}>Select a product or build a recipe to enable pricing.</div>
+                      )}
+                    </div>
+
+                    <div className="text-center text-muted" style={{ fontSize: 18, lineHeight: 1.2 }}>↓</div>
+
+                    {/* Distributor */}
+                    <div className="rounded p-3 mb-1" style={{ border: '1px solid #dee2e6', borderLeft: '4px solid #6c757d' }}>
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <div className="fw-bold" style={{ fontSize: 12, color: '#6c757d', textTransform: 'uppercase', letterSpacing: 1 }}>Distributor</div>
+                        <span className="badge text-bg-secondary" style={{ fontSize: 10 }}>Optional</span>
+                      </div>
+                      {mfgSellPrice && (
+                        <div className="text-muted mb-2" style={{ fontSize: 12 }}>Buys at: <strong>${Number(mfgSellPrice).toFixed(4)}</strong></div>
+                      )}
+                      <div className="row g-2">
+                        <div className="col-6">
+                          <label className="form-label mb-1" style={{ fontSize: 12 }}>Sell Price</label>
+                          <div className="input-group input-group-sm">
+                            <span className="input-group-text">$</span>
+                            <input type="number" min="0" step="0.0001" className="form-control"
+                              placeholder="0.0000" value={distSellPrice}
+                              onChange={e => calcHandleDistPrice(e.target.value)}
+                              disabled={!mfgSellPrice} />
+                          </div>
+                        </div>
+                        <div className="col-6">
+                          <label className="form-label mb-1" style={{ fontSize: 12 }}>Markup</label>
+                          <div className="input-group input-group-sm">
+                            <input type="number" min="0" step="0.1" className="form-control"
+                              placeholder="0.0" value={distMarkup}
+                              onChange={e => calcHandleDistMarkup(e.target.value)}
+                              disabled={!mfgSellPrice} />
+                            <span className="input-group-text">%</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-muted mt-1" style={{ fontSize: 11 }}>Leave blank → retailer buys direct from manufacturer.</div>
+                    </div>
+
+                    <div className="text-center text-muted" style={{ fontSize: 18, lineHeight: 1.2 }}>↓</div>
+
+                    {/* Retailer */}
+                    <div className="rounded p-3 mb-3" style={{ border: '1px solid #dee2e6', borderLeft: '4px solid #198754' }}>
+                      <div className="fw-bold mb-2" style={{ fontSize: 12, color: '#198754', textTransform: 'uppercase', letterSpacing: 1 }}>Retailer</div>
+                      {(distSellPrice || mfgSellPrice) && (
+                        <div className="text-muted mb-2" style={{ fontSize: 12 }}>
+                          Buys at: <strong>${Number(distSellPrice || mfgSellPrice).toFixed(4)}</strong>
+                          <span className="ms-1">{distSellPrice ? '(from distributor)' : '(direct from manufacturer)'}</span>
+                        </div>
+                      )}
+                      <div className="row g-2">
+                        <div className="col-6">
+                          <label className="form-label mb-1" style={{ fontSize: 12 }}>Retail Price</label>
+                          <div className="input-group input-group-sm">
+                            <span className="input-group-text">$</span>
+                            <input type="number" min="0" step="0.0001" className="form-control"
+                              placeholder="0.0000" value={retailPrice}
+                              onChange={e => calcHandleRetailPrice(e.target.value)}
+                              disabled={!mfgSellPrice} />
+                          </div>
+                        </div>
+                        <div className="col-6">
+                          <label className="form-label mb-1" style={{ fontSize: 12 }}>Markup</label>
+                          <div className="input-group input-group-sm">
+                            <input type="number" min="0" step="0.1" className="form-control"
+                              placeholder="0.0" value={retailMarkup}
+                              onChange={e => calcHandleRetailMarkup(e.target.value)}
+                              disabled={!mfgSellPrice} />
+                            <span className="input-group-text">%</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Summary */}
+                    {(mfgSellPrice || distSellPrice || retailPrice) && (
+                      <div className="p-3 rounded" style={{ background: '#f0f7ff', border: '1px solid #b8d4f5' }}>
+                        <div className="fw-bold mb-2" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Price Chain Summary</div>
+                        <table className="table table-sm mb-0" style={{ fontSize: 13 }}>
+                          <tbody>
+                            {calcBaseCost != null && (
+                              <tr>
+                                <td className="text-muted border-0">Cost of goods</td>
+                                <td className="fw-semibold border-0">${Number(calcBaseCost).toFixed(4)}</td>
+                                <td className="border-0"></td>
+                              </tr>
+                            )}
+                            {mfgSellPrice && (
+                              <tr>
+                                <td className="border-0">Manufacturer sells at</td>
+                                <td className="fw-bold border-0">${Number(mfgSellPrice).toFixed(4)}</td>
+                                <td className="text-muted border-0">{mfgGM ? `GM ${mfgGM}%` : ''}</td>
+                              </tr>
+                            )}
+                            {distSellPrice && (
+                              <tr>
+                                <td className="border-0">Distributor sells at</td>
+                                <td className="fw-bold border-0">${Number(distSellPrice).toFixed(4)}</td>
+                                <td className="text-muted border-0">{distMarkup ? `Markup ${distMarkup}%` : ''}</td>
+                              </tr>
+                            )}
+                            {retailPrice && (
+                              <tr>
+                                <td className="border-0">Retail price</td>
+                                <td className="fw-bold text-success border-0" style={{ fontSize: 18 }}>${Number(retailPrice).toFixed(2)}</td>
+                                <td className="text-muted border-0">{retailMarkup ? `Markup ${retailMarkup}%` : ''}</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline-secondary" onClick={calcResetPricing}>Reset Prices</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowCalcModal(false)}>Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Product Edit Modal ── */}
       {showEditModal && (

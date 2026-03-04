@@ -194,7 +194,7 @@ export default function BakingCcpStartPage() {
               continue;
             }
           }
-          (recipe || []).forEach(id => allIngredientIds.add(Number(id)));
+          (recipe || []).forEach(item => allIngredientIds.add(Number(item?.ingredientId ?? item)));
         }
 
         setIngredientEntries(prev => {

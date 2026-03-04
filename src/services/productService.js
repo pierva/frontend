@@ -48,6 +48,14 @@ const getRecipeCosts = async () => {
   return response.data; // [{ productId, estimatedCostPerUnit }]
 };
 
+const reorderProducts = async (orders) => {
+  const token = localStorage.getItem('token');
+  const response = await axios.patch(`${API_URL}/api/products/reorder`, { orders }, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
 const toggleActive = async (id) => {
   const token = localStorage.getItem('token');
   const response = await axios.patch(`${API_URL}/api/products/${id}/toggle-active`, {}, {
@@ -62,6 +70,7 @@ const toggleActive = async (id) => {
     updateProduct,
     getProductRecipe,
     getRecipeCosts,
+    reorderProducts,
     toggleActive,
   };
 

@@ -119,6 +119,7 @@ function AdminProductPage() {
   const [ingredients, setIngredients] = useState([]);
   const [currentPrices, setCurrentPrices] = useState({});
   const [recipeCosts, setRecipeCosts] = useState({});
+  const [recipeWeights, setRecipeWeights] = useState({});
 
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [newProductCompanyId, setNewProductCompanyId] = useState('');
@@ -136,11 +137,15 @@ function AdminProductPage() {
   const [manufacturer, setManufacturer] = useState('');
   const [ingredientCategory, setIngredientCategory] = useState('');
   const [editIngredient, setEditIngredient] = useState(null);
+  const [priceIngredient, setPriceIngredient] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
   const [loadingPrices, setLoadingPrices] = useState(false);
   const [newPrice, setNewPrice] = useState({ pricePerKg: '', effectiveDate: '', note: '', unit: 'kg' });
 
   const [companiesOpen, setCompaniesOpen] = useState(false);
+  const [showDeactivated, setShowDeactivated] = useState(false);
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
 
   useEffect(() => {
     loadProducts();
@@ -178,9 +183,13 @@ function AdminProductPage() {
   const loadRecipeCosts = async () => {
     try {
       const rows = await productService.getRecipeCosts();
-      const map = {};
-      for (const r of rows) map[r.productId] = r.estimatedCostPerUnit;
-      setRecipeCosts(map);
+      const costMap = {}, weightMap = {};
+      for (const r of rows) {
+        costMap[r.productId] = r.estimatedCostPerUnit;
+        weightMap[r.productId] = r.totalIngredientWeightKg;
+      }
+      setRecipeCosts(costMap);
+      setRecipeWeights(weightMap);
     } catch { /* non-critical */ }
   };
 
@@ -257,6 +266,29 @@ function AdminProductPage() {
     } catch { showAlert('Error updating product status.', 'danger'); }
   };
 
+  const activeProducts = products.filter(p => p.isActive);
+  const inactiveProducts = products.filter(p => !p.isActive);
+
+  const handleDragStart = (idx) => setDragIdx(idx);
+  const handleDragOver = (e, idx) => { e.preventDefault(); setDragOverIdx(idx); };
+  const handleDragLeave = () => setDragOverIdx(null);
+  const handleDrop = async (e, dropIdx) => {
+    e.preventDefault();
+    setDragOverIdx(null);
+    if (dragIdx === null || dragIdx === dropIdx) { setDragIdx(null); return; }
+    const reordered = [...activeProducts];
+    const [moved] = reordered.splice(dragIdx, 1);
+    reordered.splice(dropIdx, 0, moved);
+    setDragIdx(null);
+    setProducts([...reordered, ...inactiveProducts]);
+    try {
+      await productService.reorderProducts(reordered.map((p, i) => ({ id: p.id, sortOrder: i })));
+    } catch {
+      showAlert('Error saving order.', 'danger');
+      loadProducts();
+    }
+  };
+
   const handleIngredientSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -274,13 +306,16 @@ function AdminProductPage() {
       await ingredientService.updateIngredient(id, { name: editIngredient.name, manufacturer: editIngredient.manufacturer, category: editIngredient.category || null });
       showAlert('Ingredient updated successfully!', 'success');
       setEditIngredient(null);
-      setPriceHistory([]);
       loadIngredients();
     } catch { showAlert('Error updating ingredient.', 'danger'); }
   };
 
-  const startEditIngredient = async (ing) => {
+  const startEditIngredient = (ing) => {
     setEditIngredient(ing);
+  };
+
+  const startViewPrices = async (ing) => {
+    setPriceIngredient(ing);
     setNewPrice({ pricePerKg: '', effectiveDate: '', note: '', unit: 'kg' });
     setLoadingPrices(true);
     try {
@@ -299,7 +334,7 @@ function AdminProductPage() {
       ? Number(newPrice.pricePerKg) / LB_TO_KG
       : Number(newPrice.pricePerKg);
     try {
-      const entry = await ingredientService.addPrice(editIngredient.id, {
+      const entry = await ingredientService.addPrice(priceIngredient.id, {
         pricePerKg,
         effectiveDate: newPrice.effectiveDate,
         note: newPrice.note,
@@ -324,6 +359,12 @@ function AdminProductPage() {
     return <span className="badge text-bg-light border">${Number(cost).toFixed(4)}</span>;
   };
 
+  const fmtWeight = (productId) => {
+    const w = recipeWeights[productId];
+    if (w == null) return <span className="text-muted">—</span>;
+    return <span>{Number(w).toFixed(3)} kg</span>;
+  };
+
   return (
     <div className="container mt-4 pb-5">
       {message && (
@@ -338,14 +379,22 @@ function AdminProductPage() {
         {cardHeader('Products')}
         <div className="card-body">
 
-          {/* Toggle create form */}
-          <div className="mb-3">
+          {/* Action buttons */}
+          <div className="mb-3 d-flex gap-2 flex-wrap">
             <button
               className="btn btn-outline-primary btn-sm"
               onClick={() => setShowCreateProduct(v => !v)}
             >
               {showCreateProduct ? '− Cancel' : '+ New Product'}
             </button>
+            {inactiveProducts.length > 0 && (
+              <button
+                className="btn btn-outline-secondary btn-sm"
+                onClick={() => setShowDeactivated(v => !v)}
+              >
+                {showDeactivated ? 'Hide Deactivated' : `Deactivated (${inactiveProducts.length})`}
+              </button>
+            )}
           </div>
 
           {showCreateProduct && (
@@ -382,43 +431,46 @@ function AdminProductPage() {
             </form>
           )}
 
-          {/* Product list table */}
+          {/* Active products table (draggable) */}
           <div style={{ overflowX: 'auto' }}>
             <table className="table table-sm table-bordered mb-0">
               <thead className="table-light">
                 <tr>
+                  <th style={{ width: 32 }} title="Drag to reorder"></th>
                   <th>Product Name</th>
                   <th>Company</th>
+                  <th className="text-end" style={{ width: 130 }}>Ingr. Weight</th>
                   <th className="text-end" style={{ width: 140 }}>Est. Cost / unit</th>
-                  <th style={{ width: 80 }} className="text-center">Status</th>
-                  <th style={{ width: 140 }}></th>
+                  <th style={{ width: 100 }}></th>
                 </tr>
               </thead>
               <tbody>
-                {products.length === 0 && (
-                  <tr><td colSpan={5} className="text-muted text-center">No products yet.</td></tr>
+                {activeProducts.length === 0 && (
+                  <tr><td colSpan={5} className="text-muted text-center">No active products yet.</td></tr>
                 )}
-                {products.map(product => (
-                  <tr key={product.id} style={product.isActive ? undefined : { opacity: 0.55 }}>
+                {activeProducts.map((product, idx) => (
+                  <tr
+                    key={product.id}
+                    draggable
+                    onDragStart={() => handleDragStart(idx)}
+                    onDragOver={(e) => handleDragOver(e, idx)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, idx)}
+                    style={{
+                      background: dragOverIdx === idx ? '#e8f4ff' : undefined,
+                      outline: dragOverIdx === idx ? '2px dashed #2f80ed' : undefined,
+                      cursor: 'grab',
+                    }}
+                  >
+                    <td className="text-center text-muted" style={{ fontSize: 16, userSelect: 'none' }}>☰</td>
                     <td>{product.name}</td>
                     <td className="text-muted">{product.Company?.name ?? '—'}</td>
+                    <td className="text-end">{fmtWeight(product.id)}</td>
                     <td className="text-end">{fmtCost(product.id)}</td>
                     <td className="text-center">
-                      {product.isActive
-                        ? <span className="badge text-bg-success">Active</span>
-                        : <span className="badge text-bg-secondary">Inactive</span>}
-                    </td>
-                    <td className="text-center">
                       <div className="d-flex gap-1 justify-content-center">
-                        {product.isActive && (
-                          <button className="btn btn-outline-primary btn-sm" onClick={() => startEdit(product)}>Edit</button>
-                        )}
-                        <button
-                          className={`btn btn-sm ${product.isActive ? 'btn-outline-warning' : 'btn-outline-success'}`}
-                          onClick={() => handleToggleActive(product)}
-                        >
-                          {product.isActive ? 'Deactivate' : 'Reactivate'}
-                        </button>
+                        <button className="btn btn-outline-primary btn-sm" onClick={() => startEdit(product)}>Edit</button>
+                        <button className="btn btn-outline-warning btn-sm" onClick={() => handleToggleActive(product)}>Deactivate</button>
                       </div>
                     </td>
                   </tr>
@@ -426,6 +478,37 @@ function AdminProductPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Deactivated products (collapsible) */}
+          {showDeactivated && inactiveProducts.length > 0 && (
+            <div className="mt-3">
+              <p className="text-muted mb-2" style={{ fontSize: 13 }}>Deactivated products are hidden from all dropdowns and selectors.</p>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="table table-sm table-bordered mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Product Name</th>
+                      <th>Company</th>
+                      <th className="text-end" style={{ width: 140 }}>Est. Cost / unit</th>
+                      <th style={{ width: 100 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inactiveProducts.map(product => (
+                      <tr key={product.id} style={{ opacity: 0.6 }}>
+                        <td>{product.name}</td>
+                        <td className="text-muted">{product.Company?.name ?? '—'}</td>
+                        <td className="text-end">{fmtCost(product.id)}</td>
+                        <td className="text-center">
+                          <button className="btn btn-outline-success btn-sm" onClick={() => handleToggleActive(product)}>Reactivate</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -502,131 +585,162 @@ function AdminProductPage() {
 
       {/* ── Ingredients Modal ── */}
       <div className="modal fade" id="ingredientsModal" tabIndex="-1">
-        <div className="modal-dialog modal-lg">
+        <div className="modal-dialog modal-xl">
           <div className="modal-content">
             <div className="modal-header" style={{ backgroundColor: '#1b2638' }}>
               <h5 className="modal-title text-white">Manage Ingredients</h5>
-              <button type="button" className="btn-close btn-close-white" data-bs-dismiss="modal" />
+              <button type="button" className="btn-close btn-close-white" data-bs-dismiss="modal"
+                onClick={() => { setEditIngredient(null); setPriceIngredient(null); setPriceHistory([]); }} />
             </div>
-            <div className="modal-body">
-              <table className="table table-sm table-bordered mb-0">
-                <thead className="table-light">
-                  <tr><th>Name</th><th>Manufacturer</th><th>Category</th><th style={{ width: 80 }}></th></tr>
-                </thead>
-                <tbody>
-                  {ingredients.map(ing => (
-                    <tr key={ing.id}>
-                      <td>
-                        {editIngredient?.id === ing.id
-                          ? <input type="text" className="form-control form-control-sm" value={editIngredient.name} onChange={e => setEditIngredient({ ...editIngredient, name: e.target.value })} />
-                          : ing.name}
-                      </td>
-                      <td>
-                        {editIngredient?.id === ing.id
-                          ? <input type="text" className="form-control form-control-sm" value={editIngredient.manufacturer} onChange={e => setEditIngredient({ ...editIngredient, manufacturer: e.target.value })} />
-                          : ing.manufacturer}
-                      </td>
-                      <td>
-                        {editIngredient?.id === ing.id
-                          ? <input type="text" className="form-control form-control-sm" placeholder="e.g. Flour" value={editIngredient.category || ''} onChange={e => setEditIngredient({ ...editIngredient, category: e.target.value })} />
-                          : ing.category ? <span className="badge text-bg-secondary">{ing.category}</span> : <span className="text-muted" style={{ fontSize: 12 }}>—</span>}
-                      </td>
-                      <td className="text-center" style={{ whiteSpace: 'nowrap' }}>
-                        {editIngredient?.id === ing.id ? (
-                          <button className="btn btn-success btn-sm" onClick={() => handleIngredientUpdate(ing.id)}>Save</button>
-                        ) : (
-                          <button className="btn btn-outline-primary btn-sm" onClick={() => startEditIngredient(ing)}>Edit</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="modal-body d-flex gap-3" style={{ minHeight: 420 }}>
 
-              {/* Price history panel */}
-              {editIngredient && (
-                <div className="mt-4 p-3 border rounded bg-light">
-                  <h6 className="mb-3">
-                    Price History — <strong>{editIngredient.name}</strong>
-                  </h6>
+              {/* Left: ingredient list */}
+              <div style={{ flex: '1 1 0', minWidth: 0, overflowY: 'auto', maxHeight: 520 }}>
+                <table className="table table-sm table-bordered mb-0">
+                  <thead className="table-light" style={{ position: 'sticky', top: 0 }}>
+                    <tr><th>Name</th><th>Manufacturer</th><th>Category</th><th style={{ width: 110 }}></th></tr>
+                  </thead>
+                  <tbody>
+                    {ingredients.map(ing => (
+                      <tr
+                        key={ing.id}
+                        style={{
+                          background: priceIngredient?.id === ing.id ? '#f0f7ff' : undefined,
+                          outline: priceIngredient?.id === ing.id ? '2px solid #2f80ed' : undefined,
+                        }}
+                      >
+                        <td>
+                          {editIngredient?.id === ing.id
+                            ? <input type="text" className="form-control form-control-sm" value={editIngredient.name} onChange={e => setEditIngredient({ ...editIngredient, name: e.target.value })} />
+                            : ing.name}
+                        </td>
+                        <td>
+                          {editIngredient?.id === ing.id
+                            ? <input type="text" className="form-control form-control-sm" value={editIngredient.manufacturer} onChange={e => setEditIngredient({ ...editIngredient, manufacturer: e.target.value })} />
+                            : ing.manufacturer}
+                        </td>
+                        <td>
+                          {editIngredient?.id === ing.id
+                            ? <input type="text" className="form-control form-control-sm" placeholder="e.g. Flour" value={editIngredient.category || ''} onChange={e => setEditIngredient({ ...editIngredient, category: e.target.value })} />
+                            : ing.category ? <span className="badge text-bg-secondary">{ing.category}</span> : <span className="text-muted" style={{ fontSize: 12 }}>—</span>}
+                        </td>
+                        <td className="text-center" style={{ whiteSpace: 'nowrap' }}>
+                          <div className="d-flex gap-1 justify-content-center">
+                            {editIngredient?.id === ing.id ? (
+                              <>
+                                <button className="btn btn-success btn-sm" onClick={() => handleIngredientUpdate(ing.id)}>Save</button>
+                                <button className="btn btn-outline-secondary btn-sm" onClick={() => setEditIngredient(null)}>✕</button>
+                              </>
+                            ) : (
+                              <button className="btn btn-outline-primary btn-sm" onClick={() => startEditIngredient(ing)}>Edit</button>
+                            )}
+                            <button
+                              className={`btn btn-sm ${priceIngredient?.id === ing.id ? 'btn-info' : 'btn-outline-secondary'}`}
+                              onClick={() => startViewPrices(ing)}
+                              title="View / record prices"
+                            >$</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-                  <div className="row g-2 align-items-end mb-3">
-                    <div className="col-auto">
-                      <label className="form-label mb-1" style={{ fontSize: 12 }}>Price / {newPrice.unit}</label>
-                      <div className="input-group input-group-sm">
-                        <span className="input-group-text">$</span>
-                        <input
-                          type="number" min="0" step="0.0001"
-                          className="form-control" style={{ width: 100 }}
-                          placeholder="0.0000"
-                          value={newPrice.pricePerKg}
-                          onChange={e => setNewPrice(p => ({ ...p, pricePerKg: e.target.value }))}
-                        />
-                        <select
-                          className="input-group-text form-select form-select-sm"
-                          style={{ width: 65 }}
-                          value={newPrice.unit}
-                          onChange={e => setNewPrice(p => ({ ...p, unit: e.target.value }))}
-                        >
-                          <option value="kg">kg</option>
-                          <option value="lb">lb</option>
-                        </select>
+              {/* Right: price tracker panel */}
+              <div style={{ width: 340, flexShrink: 0 }}>
+                {!priceIngredient ? (
+                  <div className="d-flex align-items-center justify-content-center h-100 text-muted" style={{ fontSize: 13, border: '1px dashed #dee2e6', borderRadius: 6 }}>
+                    Click <strong className="mx-1">$</strong> on an ingredient to view its price history
+                  </div>
+                ) : (
+                  <div className="p-3 border rounded bg-light h-100 d-flex flex-column">
+                    <div className="d-flex justify-content-between align-items-start mb-3">
+                      <h6 className="mb-0">Price History<br /><strong>{priceIngredient.name}</strong></h6>
+                      <button className="btn btn-sm btn-outline-secondary" onClick={() => { setPriceIngredient(null); setPriceHistory([]); }}>✕</button>
+                    </div>
+
+                    {/* Add new price */}
+                    <div className="mb-3">
+                      <div className="mb-2">
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>Price / {newPrice.unit}</label>
+                        <div className="input-group input-group-sm">
+                          <span className="input-group-text">$</span>
+                          <input
+                            type="number" min="0" step="0.0001"
+                            className="form-control"
+                            placeholder="0.0000"
+                            value={newPrice.pricePerKg}
+                            onChange={e => setNewPrice(p => ({ ...p, pricePerKg: e.target.value }))}
+                          />
+                          <select
+                            className="input-group-text form-select form-select-sm"
+                            style={{ width: 65 }}
+                            value={newPrice.unit}
+                            onChange={e => setNewPrice(p => ({ ...p, unit: e.target.value }))}
+                          >
+                            <option value="kg">kg</option>
+                            <option value="lb">lb</option>
+                          </select>
+                        </div>
                       </div>
-                    </div>
-                    <div className="col-auto">
-                      <label className="form-label mb-1" style={{ fontSize: 12 }}>Effective from</label>
-                      <input
-                        type="date" className="form-control form-control-sm"
-                        value={newPrice.effectiveDate}
-                        onChange={e => setNewPrice(p => ({ ...p, effectiveDate: e.target.value }))}
-                      />
-                    </div>
-                    <div className="col">
-                      <label className="form-label mb-1" style={{ fontSize: 12 }}>Note <span className="text-muted">(optional)</span></label>
-                      <input
-                        type="text" className="form-control form-control-sm"
-                        placeholder="e.g. new supplier, seasonal increase"
-                        value={newPrice.note}
-                        onChange={e => setNewPrice(p => ({ ...p, note: e.target.value }))}
-                      />
-                    </div>
-                    <div className="col-auto">
+                      <div className="mb-2">
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>Effective from</label>
+                        <input
+                          type="date" className="form-control form-control-sm"
+                          value={newPrice.effectiveDate}
+                          onChange={e => setNewPrice(p => ({ ...p, effectiveDate: e.target.value }))}
+                        />
+                      </div>
+                      <div className="mb-2">
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>Note <span className="text-muted">(optional)</span></label>
+                        <input
+                          type="text" className="form-control form-control-sm"
+                          placeholder="e.g. new supplier"
+                          value={newPrice.note}
+                          onChange={e => setNewPrice(p => ({ ...p, note: e.target.value }))}
+                        />
+                      </div>
                       <button
-                        className="btn btn-sm btn-primary"
+                        className="btn btn-sm btn-primary w-100"
                         onClick={handleAddPrice}
                         disabled={!newPrice.pricePerKg || !newPrice.effectiveDate}
                       >
-                        Record
+                        Record Price
                       </button>
                     </div>
-                  </div>
 
-                  {loadingPrices ? (
-                    <div className="text-muted" style={{ fontSize: 13 }}>Loading…</div>
-                  ) : priceHistory.length === 0 ? (
-                    <div className="text-muted" style={{ fontSize: 13 }}>No prices recorded yet.</div>
-                  ) : (
-                    <table className="table table-sm table-bordered mb-0">
-                      <thead className="table-light">
-                        <tr>
-                          <th>Effective from</th>
-                          <th>Price / kg</th>
-                          <th>Note</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {priceHistory.map(p => (
-                          <tr key={p.id}>
-                            <td>{p.effectiveDate}</td>
-                            <td>${Number(p.pricePerKg).toFixed(4)}</td>
-                            <td className="text-muted">{p.note || '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              )}
+                    {/* History table */}
+                    <div style={{ overflowY: 'auto', flex: 1 }}>
+                      {loadingPrices ? (
+                        <div className="text-muted" style={{ fontSize: 13 }}>Loading…</div>
+                      ) : priceHistory.length === 0 ? (
+                        <div className="text-muted" style={{ fontSize: 13 }}>No prices recorded yet.</div>
+                      ) : (
+                        <table className="table table-sm table-bordered mb-0">
+                          <thead className="table-light" style={{ position: 'sticky', top: 0 }}>
+                            <tr>
+                              <th style={{ fontSize: 12 }}>Effective from</th>
+                              <th style={{ fontSize: 12 }}>Price / kg</th>
+                              <th style={{ fontSize: 12 }}>Note</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {priceHistory.map(p => (
+                              <tr key={p.id}>
+                                <td style={{ fontSize: 12 }}>{p.effectiveDate}</td>
+                                <td style={{ fontSize: 12 }}>${Number(p.pricePerKg).toFixed(4)}</td>
+                                <td style={{ fontSize: 12 }} className="text-muted">{p.note || '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
         </div>

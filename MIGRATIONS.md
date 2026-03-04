@@ -152,3 +152,13 @@ ALTER TABLE `ProductIngredients`
 ```
 ALTER TABLE Products ADD COLUMN isActive BOOLEAN NOT NULL DEFAULT true;
 ```
+
+### Group ingredients by category
+```
+ALTER TABLE `Ingredients` ADD COLUMN `category` VARCHAR(255) DEFAULT NULL;
+```
+
+Add option to custom sort the product list page
+```
+ALTER TABLE `Products` ADD COLUMN `sortOrder` INTEGER DEFAULT NULL;
+```

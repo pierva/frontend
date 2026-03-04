@@ -309,7 +309,9 @@ export default function BakingCcpLivePage() {
   const openTempModal = () => {
     clearBanners();
     setTempF('');
-    setTempCartId('');
+    const availableCarts = carts.filter(c => !c?.blastInAt);
+    const lastCart = availableCarts[availableCarts.length - 1]; // carts sorted ascending, last = newest
+    setTempCartId(lastCart ? String(lastCart.id) : '');
     setShowTempModal(true);
   };
 
@@ -1138,8 +1140,8 @@ export default function BakingCcpLivePage() {
                       onChange={(e) => setTempCartId(e.target.value)}
                       disabled={!isBaking}
                     >
-                      <option value="">No cart</option>
-                      {carts.filter(c => !c?.blastInAt).map(c => (
+                      <option value="">Product Temperature (no cart)</option>
+                      {[...carts.filter(c => !c?.blastInAt)].reverse().map(c => (
                         <option key={c.id} value={c.id}>Cart #{c.cartNumber}</option>
                       ))}
                     </select>

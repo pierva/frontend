@@ -1016,7 +1016,8 @@ export default function BakingCcpLivePage() {
                                     <button
                                       className="btn btn-outline-success"
                                       onClick={() => blastOut(c.id)}
-                                      disabled={!!c.blastOutAt || isVerified || isCompleted}
+                                      disabled={!c.blastInAt || !!c.blastOutAt || isVerified || isCompleted}
+                                      title={!c.blastInAt ? 'Record Blast In first' : undefined}
                                     >
                                       Blast Out
                                     </button>

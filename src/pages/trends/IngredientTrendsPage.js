@@ -21,24 +21,36 @@ function fmtVariance(pct) {
   return `${pct > 0 ? '+' : ''}${pct}%`;
 }
 
+function fmtCostVariance(val) {
+  if (val == null) return <span className="text-muted">—</span>;
+  const abs = Math.abs(val).toFixed(2);
+  return `${val > 0 ? '+' : val < 0 ? '-' : ''}$${abs}`;
+}
+
 // Groups varianceByIngredient rows into per-product summaries
 function buildProductGroups(rows) {
   const map = {};
   for (const row of rows) {
     if (!map[row.productId]) {
-      map[row.productId] = { productId: row.productId, productName: row.productName, ingredients: [], totalActual: 0, totalExpected: 0 };
+      map[row.productId] = { productId: row.productId, productName: row.productName, totalUnits: row.totalUnits || 0, ingredients: [], totalActual: 0, totalExpected: 0, totalActualCost: 0, totalExpectedCost: 0, hasCostData: false };
     }
     const g = map[row.productId];
     g.ingredients.push(row);
     g.totalActual += row.actualKgTotal;
     if (row.expectedKgTotal != null) g.totalExpected += row.expectedKgTotal;
+    if (row.costVariance !== null) {
+      g.totalActualCost += row.actualCost || 0;
+      g.totalExpectedCost += row.expectedCost || 0;
+      g.hasCostData = true;
+    }
   }
   return Object.values(map).map(g => {
     const hasExpected = g.ingredients.some(r => r.expectedKgTotal != null);
     const variancePct = (hasExpected && g.totalExpected > 0)
       ? Number(((g.totalActual - g.totalExpected) / g.totalExpected * 100).toFixed(1))
       : null;
-    return { ...g, totalActual: Number(g.totalActual.toFixed(3)), totalExpected: hasExpected ? Number(g.totalExpected.toFixed(3)) : null, variancePct };
+    const costVariance = g.hasCostData ? Number((g.totalActualCost - g.totalExpectedCost).toFixed(2)) : null;
+    return { ...g, totalActual: Number(g.totalActual.toFixed(3)), totalExpected: hasExpected ? Number(g.totalExpected.toFixed(3)) : null, variancePct, costVariance };
   }).sort((a, b) => (a.productName || '').localeCompare(b.productName || ''));
 }
 
@@ -97,6 +109,26 @@ export default function IngredientTrendsPage() {
   const productGroups = useMemo(() => buildProductGroups(varianceByIngredient), [varianceByIngredient]);
   const totalPages = Math.ceil(productGroups.length / PAGE_SIZE);
   const pageGroups = productGroups.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  // Grand totals across all products (all pages)
+  const grandTotals = useMemo(() => {
+    let totalUnits = 0, totalExpKg = 0, totalActKg = 0, totalActCost = 0, totalExpCost = 0;
+    let hasExp = false, hasCost = false;
+    for (const g of productGroups) {
+      totalUnits += g.totalUnits || 0;
+      totalActKg += g.totalActual || 0;
+      if (g.totalExpected != null) { totalExpKg += g.totalExpected; hasExp = true; }
+      if (g.hasCostData) { totalActCost += g.totalActualCost; totalExpCost += g.totalExpectedCost; hasCost = true; }
+    }
+    const variancePct = hasExp && totalExpKg > 0
+      ? Number(((totalActKg - totalExpKg) / totalExpKg * 100).toFixed(1)) : null;
+    const costVariance = hasCost ? Number((totalActCost - totalExpCost).toFixed(2)) : null;
+    return {
+      totalUnits, variancePct, costVariance,
+      totalExpKg: hasExp ? Number(totalExpKg.toFixed(3)) : null,
+      totalActKg: Number(totalActKg.toFixed(3)),
+    };
+  }, [productGroups]);
 
   const toggleExpand = (id) => {
     setExpandedIds(prev => {
@@ -252,9 +284,11 @@ export default function IngredientTrendsPage() {
                       <tr>
                         <th style={{ width: 28 }}></th>
                         <th>Product</th>
+                        <th className="text-end">Units Produced</th>
                         <th className="text-end">Expected kg</th>
                         <th className="text-end">Actual kg</th>
                         <th className="text-end">Variance</th>
+                        <th className="text-end">$ Variance</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -271,6 +305,7 @@ export default function IngredientTrendsPage() {
                                 {expanded ? '▼' : '▶'}
                               </td>
                               <td>{group.productName}</td>
+                              <td className="text-end">{group.totalUnits ?? '—'}</td>
                               <td className="text-end">
                                 {group.totalExpected != null ? group.totalExpected.toFixed(3) : <span className="text-muted fw-normal">— no recipe</span>}
                               </td>
@@ -279,6 +314,10 @@ export default function IngredientTrendsPage() {
                                 style={{ background: varianceColor(group.variancePct) }}>
                                 {fmtVariance(group.variancePct)}
                               </td>
+                              <td className="text-end"
+                                style={{ background: varianceColor(group.variancePct) }}>
+                                {fmtCostVariance(group.costVariance)}
+                              </td>
                             </tr>
 
                             {/* Ingredient detail rows (expanded) */}
@@ -286,6 +325,7 @@ export default function IngredientTrendsPage() {
                               <tr key={j} style={{ background: '#fff', fontSize: 13 }}>
                                 <td></td>
                                 <td className="ps-4 text-muted">{ing.ingredientName}</td>
+                                <td></td>
                                 <td className="text-end text-muted">
                                   {ing.expectedKgTotal != null ? ing.expectedKgTotal.toFixed(3) : '—'}
                                 </td>
@@ -294,12 +334,35 @@ export default function IngredientTrendsPage() {
                                   style={{ background: varianceColor(ing.variancePct) }}>
                                   {fmtVariance(ing.variancePct)}
                                 </td>
+                                <td className="text-end text-muted"
+                                  style={{ background: varianceColor(ing.variancePct) }}>
+                                  {fmtCostVariance(ing.costVariance)}
+                                </td>
                               </tr>
                             ))}
                           </React.Fragment>
                         );
                       })}
                     </tbody>
+                    {productGroups.length > 0 && (
+                      <tfoot>
+                        <tr style={{ fontWeight: 700, background: '#e9ecef', borderTop: '2px solid #dee2e6' }}>
+                          <td></td>
+                          <td>TOTAL</td>
+                          <td className="text-end">{grandTotals.totalUnits}</td>
+                          <td className="text-end">
+                            {grandTotals.totalExpKg != null ? grandTotals.totalExpKg.toFixed(3) : '—'}
+                          </td>
+                          <td className="text-end">{grandTotals.totalActKg.toFixed(3)}</td>
+                          <td className="text-end" style={{ background: varianceColor(grandTotals.variancePct) }}>
+                            {fmtVariance(grandTotals.variancePct)}
+                          </td>
+                          <td className="text-end" style={{ background: varianceColor(grandTotals.variancePct) }}>
+                            {fmtCostVariance(grandTotals.costVariance)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
 

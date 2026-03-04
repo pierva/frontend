@@ -134,6 +134,7 @@ function AdminProductPage() {
 
   const [ingredientName, setIngredientName] = useState('');
   const [manufacturer, setManufacturer] = useState('');
+  const [ingredientCategory, setIngredientCategory] = useState('');
   const [editIngredient, setEditIngredient] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
   const [loadingPrices, setLoadingPrices] = useState(false);
@@ -259,17 +260,18 @@ function AdminProductPage() {
   const handleIngredientSubmit = async (e) => {
     e.preventDefault();
     try {
-      await ingredientService.createIngredient({ name: ingredientName, manufacturer });
+      await ingredientService.createIngredient({ name: ingredientName, manufacturer, category: ingredientCategory || null });
       showAlert('Ingredient created successfully!', 'success');
       setIngredientName('');
       setManufacturer('');
+      setIngredientCategory('');
       loadIngredients();
     } catch { showAlert('Error creating ingredient.', 'danger'); }
   };
 
   const handleIngredientUpdate = async (id) => {
     try {
-      await ingredientService.updateIngredient(id, { name: editIngredient.name, manufacturer: editIngredient.manufacturer });
+      await ingredientService.updateIngredient(id, { name: editIngredient.name, manufacturer: editIngredient.manufacturer, category: editIngredient.category || null });
       showAlert('Ingredient updated successfully!', 'success');
       setEditIngredient(null);
       setPriceHistory([]);
@@ -433,13 +435,17 @@ function AdminProductPage() {
         <div className="card-body">
           <form onSubmit={handleIngredientSubmit}>
             <div className="row g-3 align-items-end">
-              <div className="col-md-5">
+              <div className="col-md-4">
                 <label className="form-label">Ingredient Name</label>
                 <input type="text" className="form-control" value={ingredientName} onChange={e => setIngredientName(e.target.value)} required />
               </div>
-              <div className="col-md-5">
+              <div className="col-md-3">
                 <label className="form-label">Manufacturer</label>
                 <input type="text" className="form-control" value={manufacturer} onChange={e => setManufacturer(e.target.value)} required />
+              </div>
+              <div className="col-md-3">
+                <label className="form-label">Category <small className="text-muted">(optional)</small></label>
+                <input type="text" className="form-control" placeholder="e.g. Flour, Oil" value={ingredientCategory} onChange={e => setIngredientCategory(e.target.value)} />
               </div>
               <div className="col-md-2 d-flex gap-2">
                 <button type="submit" className="btn btn-primary btn-sm">Add</button>
@@ -505,7 +511,7 @@ function AdminProductPage() {
             <div className="modal-body">
               <table className="table table-sm table-bordered mb-0">
                 <thead className="table-light">
-                  <tr><th>Name</th><th>Manufacturer</th><th style={{ width: 80 }}></th></tr>
+                  <tr><th>Name</th><th>Manufacturer</th><th>Category</th><th style={{ width: 80 }}></th></tr>
                 </thead>
                 <tbody>
                   {ingredients.map(ing => (
@@ -519,6 +525,11 @@ function AdminProductPage() {
                         {editIngredient?.id === ing.id
                           ? <input type="text" className="form-control form-control-sm" value={editIngredient.manufacturer} onChange={e => setEditIngredient({ ...editIngredient, manufacturer: e.target.value })} />
                           : ing.manufacturer}
+                      </td>
+                      <td>
+                        {editIngredient?.id === ing.id
+                          ? <input type="text" className="form-control form-control-sm" placeholder="e.g. Flour" value={editIngredient.category || ''} onChange={e => setEditIngredient({ ...editIngredient, category: e.target.value })} />
+                          : ing.category ? <span className="badge text-bg-secondary">{ing.category}</span> : <span className="text-muted" style={{ fontSize: 12 }}>—</span>}
                       </td>
                       <td className="text-center" style={{ whiteSpace: 'nowrap' }}>
                         {editIngredient?.id === ing.id ? (

@@ -242,7 +242,6 @@ function AdminProductPage() {
       start.setDate(end.getDate() - days);
       const fmt = d => d.toISOString().slice(0, 10);
       const params = { startDate: fmt(start), endDate: fmt(end) };
-      if (calcMode === 'product' && calcProductId) params.productId = calcProductId;
       const data = await analyticsService.getProductionSummary(params);
       const val = data?.kpis?.laborCostPerUnit;
       setCalcLaborCost(val != null ? String(Number(val).toFixed(4)) : '');
@@ -1008,10 +1007,7 @@ function AdminProductPage() {
                       {calcLaborMode === 'db' ? (
                         <div>
                           <div className="text-muted mb-2" style={{ fontSize: 12 }}>
-                            Select a period to fetch the average labor cost / unit
-                            {calcMode === 'product' && calcProductId
-                              ? ' for the selected product'
-                              : ' across all products'}:
+                            Select a period to fetch the average labor cost / unit across all products:
                           </div>
                           <div className="btn-group btn-group-sm mb-2">
                             {[30, 60, 90, 120, 360].map(d => (

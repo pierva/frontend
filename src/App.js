@@ -29,6 +29,7 @@ import BakingCcpStartPage from './pages/ccp/BakingCcpStartPage';
 import BakingCcpLivePage from './pages/ccp/BakingCcpLivePage';
 import BakingCcpQueuePage from './pages/ccp/BakingCcpQueuePage';
 import BakingCcpVerifyPage from './pages/ccp/BakingCcpVerifyPage';
+import ProductionSchedulePage from './pages/ProductionSchedulePage';
 
 function App() {
   const isAuthed = authService.isTokenValid();
@@ -69,6 +70,11 @@ function App() {
           <Route path="/factory/orders" element={
             <ProtectedRoute moduleKey="production.orders">
               <FactoryOrdersPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/production-schedule" element={
+            <ProtectedRoute moduleKey="production.schedule">
+              <ProductionSchedulePage />
             </ProtectedRoute>
           } />
 

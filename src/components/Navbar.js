@@ -274,6 +274,11 @@ function Navbar() {
                   <li className="nav-item d-lg-none">
                     <Link className="nav-link" to="/inventory" onClick={closeAll}>Inventory</Link>
                   </li>
+                  {isLoggedIn && hasModule('production.schedule') && (
+                    <li className="nav-item d-lg-none">
+                      <Link className="nav-link" to="/production-schedule" onClick={closeAll}>Production Schedule</Link>
+                    </li>
+                  )}
                   {isLoggedIn && hasModule('analytics.overview') && (
                     <li className="nav-item d-lg-none">
                       <Link className="nav-link" to="/trends" onClick={closeAll}>Trends and Analytics</Link>
@@ -324,6 +329,9 @@ function Navbar() {
                       <Link className="dropdown-item" to="/logs" onClick={closeAll}>Production Logs</Link>
                       <Link className="dropdown-item" to="/traceability" onClick={closeAll}>Traceability</Link>
                       <Link className="dropdown-item" to="/inventory" onClick={closeAll}>Inventory</Link>
+                      {isLoggedIn && hasModule('production.schedule') && (
+                        <Link className="dropdown-item" to="/production-schedule" onClick={closeAll}>Production Schedule</Link>
+                      )}
 
                       {hasAnyDropdownSection && <div className="dropdown-divider" />}
 

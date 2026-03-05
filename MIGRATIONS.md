@@ -162,3 +162,10 @@ Add option to custom sort the product list page
 ```
 ALTER TABLE `Products` ADD COLUMN `sortOrder` INTEGER DEFAULT NULL;
 ```
+
+### Update of Inventory Page
+```
+ALTER TABLE `InventoryAdjustments` ADD COLUMN `reason` VARCHAR(255);
+ALTER TABLE `InventoryAdjustments` ADD COLUMN `note` VARCHAR(255);
+ALTER TABLE `InventoryAdjustments` ADD COLUMN `closedAt` DATE;
+```
